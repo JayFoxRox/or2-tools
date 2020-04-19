@@ -12,6 +12,7 @@ read_h = common.read_h
 read_b = common.read_b
 
 export_tags = True
+export_objs = True
 
 fo = None
 obj_v_index = None
@@ -76,7 +77,7 @@ def cs___smt_extract(f):
       vo = read_l(1)[0] # Always zero
       assert(vo == 0)
 
-      offsets += [(ve + 0x10, 0, 0, va, vb, vc, vd)]
+      offsets += [(ve + 0x10, va, vb, vc, vd)]
 
       cy += 1
       print(cy)
@@ -92,49 +93,17 @@ def cs___smt_extract(f):
   print()
   print(common.offset)
 
-  #FIXME: This is a stupid heuristic
-  # offsets of FFFFFFFFFFFFFFFFFFFFFFFF patterns in file
-  ranges = []
-  if False:
-    of = 0
-    while((of + 56) < len(common.data)):
-      ofa = common.data.find(bytes([0xFF]*12), of + 56)
-      print(ofa)
-      if ofa == -1:
-        break
-
-      ofb = ofa+56
-      while common.data[ofb:ofb+12] == bytes([0xFF]*12):
-        ofb += 56
-
-      ofb -= 56
-      of = ofb
-
-      print("adding", ofa, ofb)
-      fixup = 0 #FIXME: For CS_
-      ranges += [(ofa+fixup, ofb+fixup, fixup)]
-      fixup = 16 #FIXME: For OBJ_
-      ranges += [(ofa+fixup, ofb+fixup, fixup)]
 
 
-  for r in ranges:
-    print(r)
-    offsets += [(r[0]-44-48,1+(r[1]-r[0])//56,r[2])]
-
-
-
-  for offsetx in offsets:
+  for offseti, offsetx in enumerate(offsets):
 
 
     common.offset = offsetx[0]
-    counta = offsetx[1]
-    fixup = offsetx[2]
 
-
-    va = offsetx[3] # [middle] Some start pointer?
-    vb = offsetx[4] # [lowest] Some start pointer? 0x10 bytes for each element between middle and highest?
-    vc = offsetx[5] # [highest] Some end pointer [+4 / +8 on va?]
-    vd = offsetx[6] #FIXME: Use after figuring out what this is
+    va = offsetx[1] # [middle] Some start pointer?
+    vb = offsetx[2] # [lowest] Some start pointer? 0x10 bytes for each element between middle and highest?
+    vc = offsetx[3] # [highest] Some end pointer [+4 / +8 on va?]
+    vd = offsetx[4] #FIXME: Use after figuring out what this is
 
 
 
@@ -161,7 +130,7 @@ def cs___smt_extract(f):
 
 
     print("")
-    print("%d %d" % (head[0], counta))
+    print("%d" % (head[0]))
     print("")
 
     if False:
@@ -190,7 +159,7 @@ def cs___smt_extract(f):
     assert(common.offset - offsetx[0] == head[0])
     i = 0
     tmp = None
-    while((common.offset - offsetx[0]) < head[1]): # Similar to counta?
+    while((common.offset - offsetx[0]) < head[1]):
 
       tmp = {}
 
@@ -199,10 +168,10 @@ def cs___smt_extract(f):
       tmp['unk1?'] = read_f(1, silent=True)[0]
       tmp['unk2?'] = read_l(2, silent=True)
       tmp['matrix_index?'] = read_l(1, silent=True)[0] # Optional matrix index?
-      tmp['unk3b?'] = read_l(1, silent=True)[0]
-      tmp['collect1_index?'] = read_l(1, silent=True)[0] # index to next object?
+      tmp['collect1_index1?'] = read_l(1, silent=True)[0]
+      tmp['collect1_index2?'] = read_l(1, silent=True)[0] # index to next object?
       tmp['collect2_index?'] = read_l(1, silent=True)[0]
-      tmp['collect2_indices?'] = read_l(3, silent=True) # More optional indices
+      tmp['collect2_indices?'] = read_l(3, silent=True) # More optional indices?
 
       print(i, tmp)
 
@@ -231,20 +200,6 @@ def cs___smt_extract(f):
 
       #assert(tmp['unk3a?'] == 0xFFFFFFFF)
 
-      #if i == 0:
-      #  assert(tmp['collect1_index?'] == 1)
-      if i < counta - 1:
-        assert(tmp['collect1_index?'] != 0xFFFFFFFF)
-        assert(tmp['collect1_index?'] == i+1)
-
-      # Almost always holds true.. but not always
-      #assert(tmp['collect2_index?'] == i)
-      if i < counta:
-        assert(tmp['collect2_index?'] <= i)
-
-      #assert(tmp['unk3?'] == tuple([0xFFFFFFFF]*2))
-      if i < counta:
-        assert(tmp['collect2_indices?'] == tuple([0xFFFFFFFF]*3))
       assert(tmp['collect2_indices?'][0] <= tmp['collect2_indices?'][1])
       assert(tmp['collect2_indices?'][1] <= tmp['collect2_indices?'][2])
       if tmp['collect2_indices?'] != tuple([0xFFFFFFFF]*3):
@@ -253,27 +208,25 @@ def cs___smt_extract(f):
       objects += [tmp]
       i += 1
 
-    if tmp != None:
-      assert(tmp['collect1_index?'] == 0xFFFFFFFF)
-
-    fo = open("/tmp/or2/%s/cs___smt/objects-0x%X.obj" % (filename, offsetx[0]), "wb")
-    for tmp in objects:
-      fo.write(b"usemtl 0x%08X\n" % tmp['unk0_flags?'])
-      def rot(v, angle, f):
-        angle *= math.pi / 180.0
-        vr = (
-          v[0]+math.sin(angle) * f,
-          v[1],
-          v[2]+math.cos(angle) * f
-        )
-        return vr 
-      fy = 8.0
-      fx = fy / 4.0
-      fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+0.0, fx)))
-      fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+90.0, fy)))
-      fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+180.0, fx)))
-      fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+270.0, 0.0)))
-      fo.write(b"f %d %d %d %d\n" % (1+i*4,2+i*4,3+i*4,4+i*4))
+    if export_objs:
+      fo = open("/tmp/or2/%s/cs___smt/objects-0x%X.obj" % (filename, offsetx[0]), "wb")
+      for tmp in objects:
+        fo.write(b"usemtl 0x%08X\n" % tmp['unk0_flags?'])
+        def rot(v, angle, f):
+          angle *= math.pi / 180.0
+          vr = (
+            v[0]+math.sin(angle) * f,
+            v[1],
+            v[2]+math.cos(angle) * f
+          )
+          return vr 
+        fy = 8.0
+        fx = fy / 4.0
+        fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+0.0, fx)))
+        fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+90.0, fy)))
+        fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+180.0, fx)))
+        fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+270.0, 0.0)))
+        fo.write(b"f %d %d %d %d\n" % (1+i*4,2+i*4,3+i*4,4+i*4))
 
 
     matrices = []
@@ -389,7 +342,7 @@ def cs___smt_extract(f):
     i = 0
     while((common.offset - offsetx[0]) < head[7]):
       tmp = {}
-      tmp['unk0?'] = read_l(1, silent=True)[0]
+      tmp['unk0?'] = read_l(1, silent=True)[0] # vertex buffer count?
       tmp['ib_ptr'] = read_l(1, silent=True)[0]
       tmp['vb_ptr'] = read_l(1, silent=True)[0]
       tmp['unk1_ptr?'] = read_l(3, silent=True)  #FIXME: Maybe index buffers for LOD?
@@ -481,72 +434,72 @@ def cs___smt_extract(f):
 
         #print("0x%08X, #WTFREMOVEME" % tmp_texture['unk0?'])
         assert(tmp_texture['unk0?'] in [
-0x00000000,
-0x00089000,
-0x00089001,
-0x00089008,
-0x0008A000,
-0x00091000,
-0x00092000,
-0x00099000,
-0x0009A000,
-0x0009B000,
-0x0009B001,
-0x0009B002,
-0x0009B008,
-0x0009B100,
-0x000C9000,
-0x000C9001,
-0x000CB000,
-0x000DB000,
-0x00289000,
-0x00289001,
-0x00289004,
-0x00289008,
-0x0028A000,
-0x0028A001,
-0x0028B000,
-0x00292000,
-0x00292001,
-0x00299000,
-0x0029A000,
-0x0029B000,
-0x0029B001,
-0x0029B002,
-0x0029B008,
-0x0029B100,
-0x002C9000,
-0x00489000,
-0x00489001,
-0x00489008,
-0x0048A000,
-0x0048B000,
-0x00491000,
-0x00492000,
-0x00499000,
-0x0049A000,
-0x0049B000,
-0x0049B002,
-0x0049B008,
-0x004C9000,
-0x004DB000,
-0x00C89000,
-0x06099000,
-0x06289000,
-0x06299000,
-0x0629B000,
-0x06489000,
-0x10089000,
-0x10089001,
-0x1009B000,
-0x100C9000,
-0x10289000,
-0x10489000,
-0x10889000,
-0x10A89000,
-0x10C89000,
-0x14C89000,
-])
+          0x00000000,
+          0x00089000,
+          0x00089001,
+          0x00089008,
+          0x0008A000,
+          0x00091000,
+          0x00092000,
+          0x00099000,
+          0x0009A000,
+          0x0009B000,
+          0x0009B001,
+          0x0009B002,
+          0x0009B008,
+          0x0009B100,
+          0x000C9000,
+          0x000C9001,
+          0x000CB000,
+          0x000DB000,
+          0x00289000,
+          0x00289001,
+          0x00289004,
+          0x00289008,
+          0x0028A000,
+          0x0028A001,
+          0x0028B000,
+          0x00292000,
+          0x00292001,
+          0x00299000,
+          0x0029A000,
+          0x0029B000,
+          0x0029B001,
+          0x0029B002,
+          0x0029B008,
+          0x0029B100,
+          0x002C9000,
+          0x00489000,
+          0x00489001,
+          0x00489008,
+          0x0048A000,
+          0x0048B000,
+          0x00491000,
+          0x00492000,
+          0x00499000,
+          0x0049A000,
+          0x0049B000,
+          0x0049B002,
+          0x0049B008,
+          0x004C9000,
+          0x004DB000,
+          0x00C89000,
+          0x06099000,
+          0x06289000,
+          0x06299000,
+          0x0629B000,
+          0x06489000,
+          0x10089000,
+          0x10089001,
+          0x1009B000,
+          0x100C9000,
+          0x10289000,
+          0x10489000,
+          0x10889000,
+          0x10A89000,
+          0x10C89000,
+          0x14C89000,
+        ])
 
         #assert(tmp_texture['unk2?'] % 0x200000 == 0) # Broken by 0xBF333333, 0xBF4CCCCD
         assert(tmp_texture['unk2?'] in [0x00000000, 0xBF000000, 0xBF333333, 0xBF4CCCCD, 0xBF800000, 0xBFC00000, 0xC0000000, 0xC0200000, 0xC0400000, 0xC0600000, 0xC0800000])
@@ -636,9 +589,9 @@ def cs___smt_extract(f):
       ptrass = []
       for i in range(head2[0]):
         ptra,a1,a2,a3 = read_l(4) # offset to list + 3x zero
-        assert(a1 == 0)
-        assert(a2 == 0)
-        assert(a3 == 0)
+        #assert(a1 == 0)
+        #assert(a2 == 0)
+        #assert(a3 == 0)
 
         # Vertices
         common.push()
@@ -670,7 +623,7 @@ def cs___smt_extract(f):
         ptrbss += [ptrbs[1]]
 
 
-      if True:
+      if export_objs:
           
         print()
         print("Exporting")
@@ -684,11 +637,6 @@ def cs___smt_extract(f):
         fo.write(b"s 1\n")
         fo.write(b"mtllib ../xpr/xpr.mtl\n")
 
-        def sanitize(f):
-          if math.isnan(f):
-            return 0.0 #FIXME: WHY?!
-          return f
-
         def export_mesh(draw_type, fvf, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
           global fo
           global obj_v_index
@@ -699,101 +647,106 @@ def cs___smt_extract(f):
 
           #vertex_size = 24
 
-          print(vertex_buf_size, vertex_size)
           assert(vertex_buf_size % vertex_size == 0)
           vertex_count = vertex_buf_size // vertex_size
 
           assert(index_buf_size % 2 == 0)
           index_count = index_buf_size // 2
 
+          #FIXME: We keep re-uploading a lot of the vertex buffer
+          #print(draw_count, index_count, vertex_count)
+
           #FIXME: Fix <SPECIAL> mode
           if fvf == 0:
             assert(False)
 
-          has_normal = False
-          has_texture = False
+          #FIXME: Weight betas support
+          if fvf & 0xE == 0x2:
+            betas = 0
+          elif fvf & 0xE == 0x6:
+            betas = 1
+          elif fvf & 0xE == 0x8:
+            betas = 2
+          elif fvf & 0xE == 0xA:
+            betas = 3
+          else:
+            assert(False)
+
+          texture_count = (fvf & 0xF00) >> 8
+
+          has_normal = fvf & 0x10
+          has_diffuse = fvf & 0x40
+          has_texture = tex_unit_index < texture_count
 
           #FIXME: Where to get the vertex count?
           common.offset = vertex_ptr
           for i in range(vertex_count):
 
-            fo.write(b"# %d %d 0x%X\n" % (common.offset, vertex_size, fvf))
+            s = [] #b"# %d %d 0x%X\n" % (common.offset, vertex_size, fvf)
 
             p = read_f(3, silent=True)
-            fo.write(b"v %f %f %f\n" % p)
+            s += [b"v %f %f %f\n" % p]
 
-            if True:
 
-              #FIXME: Weight betas support
-              if fvf & 0xE == 0x2:
-                betas = 0
-              elif fvf & 0xE == 0x6:
-                betas = 1
-              elif fvf & 0xE == 0x8:
-                betas = 2
-              elif fvf & 0xE == 0xA:
-                betas = 3
-              else:
-                assert(False)
+            for j in range(betas):
+              #FIXME: Support beta weights
+              read_f(1, silent=True)[0]
 
-              for j in range(betas):
-                read_f(1, silent=True)[0]
+            if has_normal:
+              n = read_l(1, silent=True)[0]
+              nx = (n >> 0) & ((1 << 11) - 1)
+              ny = (n >> 11) & ((1 << 11) - 1)
+              nz = (n >> 22) & ((1 << 10) - 1)
+              nx -= (nx & (1 << 10)) << 1
+              ny -= (ny & (1 << 10)) << 1
+              nz -= (nz & (1 << 9)) << 1
+              nz = nz * 2
+              s += [b"vn %d %d %d\n# 0x%08X\n" % (nx,ny,nz,n)]
 
-              if fvf & 0x10:
-                n = read_l(1, silent=True)[0]
-                nx = (n >> 0) & ((1 << 11) - 1)
-                ny = (n >> 11) & ((1 << 11) - 1)
-                nz = (n >> 22) & ((1 << 10) - 1)
-                nx -= (nx & (1 << 10)) << 1
-                ny -= (ny & (1 << 10)) << 1
-                nz -= (nz & (1 << 9)) << 1
-                nz = nz * 2
-                fo.write(b"vn %d %d %d\n# 0x%08X\n" % (nx,ny,nz,n))
-                has_normal = True
+            if has_diffuse:
+              #FIXME: Diffuse color
+              read_l(1, silent=True)
 
-              if fvf & 0x40:
-                #FIXME: Diffuse color
-                read_l(1, silent=True)
+            for j in range(texture_count):
+              u, v = read_f(2, silent=True)
+              if j == tex_unit_index:
+                s += [b"vt %f %f\n" % (u, v)]
 
-              texture_count = (fvf & 0xF00) >> 8
-              for j in range(texture_count):
-                u, v = read_f(2, silent=True)
-                if j == tex_unit_index:
-                  pass
-                  fo.write(b"vt %f %f\n" % (sanitize(u), sanitize(v)))
-                  has_texture = True
-            else:
-              read_l((vertex_size - 12) // 4, silent=True)
+
+            fo.write(b"".join(s))
               
 
           def emit_index(i):
             global fo
-            fo.write(b" %d" % (obj_v_index+i))
+            s = []
+            s += [b" %d" % (obj_v_index+i)]
 
             if has_texture:
-              fo.write(b"/%d" % (obj_vt_index+i))
+              s += [b"/%d" % (obj_vt_index+i)]
             else:
               if has_normal:
-                fo.write(b"/")
+                s += [b"/"]
 
             if has_normal:    
-              fo.write(b"/%d" % (obj_vn_index+i))      
+              s += [b"/%d" % (obj_vn_index+i)]
+
+            return b"".join(s)
           
           def emit_face(ls):
             global fo
-            fo.write(b"f")
+            s = []
+            s += [b"f"]
             for l in ls:
-              emit_index(l)
-            fo.write(b"\n")
+              s += [emit_index(l)]
+            s += [b"\n"]
+            fo.write(b"".join(s))
 
           #FIXME: Display the full index buffer?
           common.offset = index_ptr
           indices = read_h(index_count, silent=True)
-          if False:
-            pass
-          elif draw_type == 5:
-            #FIXME: Untested
-            for i in range(draw_count//3):
+          
+          if draw_type == 5:
+            for i in range(draw_count):
               emit_face([indices[3*i+0], indices[3*i+1], indices[3*i+2]])
           elif draw_type == 6:
             for i in range(draw_count): #FIXME: Is this 1/2 too many?
@@ -802,9 +755,10 @@ def cs___smt_extract(f):
               else:
                 emit_face([indices[0+i], indices[1+i], indices[2+i]])
           elif draw_type == 8:
-            #FIXME: Untested
-            for i in range(draw_count//4):
+            for i in range(draw_count):
               emit_face([indices[4*i+0], indices[4*i+1], indices[4*i+2], indices[4*i+3]])
+          else:
+            assert(False)
 
           obj_v_index += vertex_count
           if has_texture:
@@ -815,50 +769,63 @@ def cs___smt_extract(f):
           common.offset = real_offset
 
         # Use draw call information
+        def draw(i1):
+          unk_collect1 = objects[i1]
 
-        for _i2 in range(len(collect2)):
-          i2 = _i2
+          print(offseti, len(offsets), ":", i1, len(objects))
 
-          unk_collect2 = collect2[i2]
+          #FIXME: Apply matrix
+          im = unk_collect1['matrix_index?']
 
-          for _i3 in range(unk_collect2['a_count?']):
-            i3 = unk_collect2['a_collect3_index?'] + _i3
+          #FIXME: Why are these 2 different ones?
+          for _i2 in [unk_collect1['collect2_index?']] + list(unk_collect1['collect2_indices?']):
+            i2 = _i2
 
-            unk_collect3 = collect3[i3]
+            if i2 == 0xFFFFFFFF:
+              continue
 
-            #FIXME: Also do for b_count?
-            for l4 in ['a','b']:
-              for _i4 in range(unk_collect3[l4 + '_count?']):
-                i4 = unk_collect3[l4 + '_collect4/5_index?'] + _i4
-                unk_collect4 = collect4[i4]
+            unk_collect2 = collect2[i2]
 
-                i5 = unk_collect4['collect5_index?']
-                i6 = unk_collect3['collect6_index?']
-                i7 = unk_collect4['collect7_index?']
+            for _i3 in range(unk_collect2['a_count?']):
+              i3 = unk_collect2['a_collect3_index?'] + _i3
 
-                mesh = collect6[i6]
-                draw_call = collect5[i5]
-                textures = collect7[i7]
+              unk_collect3 = collect3[i3]
 
-                vb = data_base + ptrass[i6]
-                ib = ptrbss[i6] + 0x10
+              #FIXME: Also do for b_count?
+              for l4 in ['a','b']:
+                for _i4 in range(unk_collect3[l4 + '_count?']):
+                  i4 = unk_collect3[l4 + '_collect4/5_index?'] + _i4
+                  unk_collect4 = collect4[i4]
 
-                print()
-                print("vertices:", vb)
-                print("indices:", ib)
+                  i5 = unk_collect4['collect5_index?']
+                  i6 = unk_collect3['collect6_index?']
+                  i7 = unk_collect4['collect7_index?']
 
-                #FIXME: Handle transform
-                fo.write(b"usemtl texture-%d\n" % (textures['units'][tex_unit_index]['texture_index']))
+                  mesh = collect6[i6]
+                  draw_call = collect5[i5]
+                  textures = collect7[i7]
 
-                #assert(draw_call['index_offset'] == 0)
-                #assert(draw_call['unk0?'] == 0x697)
+                  vb = data_base + ptrass[i6]
+                  ib = ptrbss[i6] + 0x10
 
-                ib_skip = draw_call['index_offset'] * 2
-                vb_skip = mesh['vertex_size'] * unk_collect4['vertex_offset']
+                  #FIXME: Handle transform
+                  fo.write(b"usemtl texture-%d\n" % (textures['units'][tex_unit_index]['texture_index']))
 
-                print(collect6)
-                fo.write(("o collect2[%s];collect3[%s];collect4%s[%s]\n" % (i2, i3, l4, i4)).encode('ascii'))
-                export_mesh(draw_call['primitive_type'], mesh['fvf?'], draw_call['index_count'], mesh['vb_size'] - vb_skip, mesh['ib_size'] - ib_skip, mesh['vertex_size'], vb + vb_skip, ib + ib_skip)
+                  #assert(draw_call['index_offset'] == 0)
+                  #assert(draw_call['unk0?'] == 0x697)
+
+                  ib_skip = draw_call['index_offset'] * 2
+                  vb_skip = mesh['vertex_size'] * unk_collect4['vertex_offset']
+
+                  fo.write(("o c1[%s],c2[%s];c3[%s];c4%s[%s];c5[%s];c6[%s];c7[%s]\n" % (i1, i2, i3, l4, i4, i5, i6, i7)).encode('ascii'))
+                  export_mesh(draw_call['primitive_type'], mesh['fvf?'], draw_call['index_count'], mesh['vb_size'] - vb_skip, mesh['ib_size'] - ib_skip, mesh['vertex_size'], vb + vb_skip, ib + ib_skip)
+
+          if unk_collect1['collect1_index1?'] != 0xFFFFFFFF:
+            draw(unk_collect1['collect1_index1?'])
+          if unk_collect1['collect1_index2?'] != 0xFFFFFFFF:
+            draw(unk_collect1['collect1_index2?'])
+
+        draw(0)
 
         common.offset = real_offset
 
@@ -873,11 +840,9 @@ def cs___smt_extract(f):
     assert(len(collect7) == head2[1])
     assert(len(collect8) == head2[2])
 
-    if export_tags:
-      common.export_tags("/tmp/or2/%s/decompressed.bin.tags" % (filename))
 
     if len(matrices) > 0:
-      fo = open("/tmp/or2/%s/cs___smt/matrices.dae" % (filename), "wb")
+      fo = open("/tmp/or2/%s/cs___smt/matrices-0x%X.dae" % (filename, offsetx[0]), "wb")
       fo.write(b"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
       fo.write(b"<COLLADA xmlns=\"http://www.collada.org/2005/11/COLLADASchema\" version=\"1.4.1\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n")
       fo.write(b"  <asset>\n")
@@ -901,4 +866,6 @@ def cs___smt_extract(f):
       fo.write(b"  </scene>\n")
       fo.write(b"</COLLADA>\n")
 
+  if export_tags:
+    common.export_tags("/tmp/or2/%s/decompressed.bin.tags" % (filename))
 

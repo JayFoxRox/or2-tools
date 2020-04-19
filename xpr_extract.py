@@ -9,8 +9,8 @@ import io
 
 
 export_png = True
-export_trim = True
-export_full = True
+export_trim = False
+export_full = False
 
 os.environ["XBOX_IF"] = "none"
 from xboxpy import nv2a

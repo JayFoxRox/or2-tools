@@ -13,38 +13,39 @@ def read_t(count, ty, fmt, comment=None, silent=False):
   if count == 0:
     return ()
     
-  size = struct.calcsize(ty)
+  tys = "<%d%c" % (count, ty)
+
+  size = struct.calcsize(tys)
   if size == 0:
     return ()
 
   if comment == None:
     comment = "unknown:%s" % ty[1:]
-
   regions += [(offset, offset + size*count, comment)]
 
-  for i in range(count):
-    v = struct.unpack_from(ty, data, offset)[0]
-    vs += [v]
-    offset += size
+  vs = struct.unpack_from(tys, data, offset)
+  offset += size
+
   if not silent:
-    print(";".join([fmt % v for v in vs]))  
-  return tuple(vs)
+    print(";".join([fmt % v for v in vs]))
+
+  return vs
 
 def read_b(count, comment=None, silent=False):
   global offset
-  return read_t(count, "<B", "%02X", comment, silent) 
+  return read_t(count, "B", "%02X", comment, silent) 
 
 def read_h(count, comment=None, silent=False):
   global offset
-  return read_t(count, "<H", "%04X", comment, silent) 
+  return read_t(count, "H", "%04X", comment, silent) 
 
 def read_l(count, comment=None, silent=False):
   global offset
-  return read_t(count, "<L", "%08X", comment, silent) 
+  return read_t(count, "L", "%08X", comment, silent) 
 
 def read_f(count, comment=None, silent=False):
   global offset
-  return read_t(count, "<f", "%+.5f", comment, silent) 
+  return read_t(count, "f", "%+.5f", comment, silent) 
 
 def export_tags(path):
   fo=open(path, "wb")

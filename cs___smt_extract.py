@@ -13,7 +13,13 @@ read_b = common.read_b
 
 export_tags = True
 
+fo = None
+obj_vertex_index = None
+
 def cs___smt_extract(f):
+
+  global fo
+  global obj_vertex_index
 
   # Designed for CS_CS_1A_SMT.GZ   weird.bin
 
@@ -114,15 +120,21 @@ def cs___smt_extract(f):
 
   for offsetx in offsets:
 
+
     common.offset = offsetx[0]
     counta = offsetx[1]
     fixup = offsetx[2]
 
 
-    va = offsetx[3]
-    vb = offsetx[4]
-    vc = offsetx[5]
-    vd = offsetx[6]
+    va = offsetx[3] # [middle] Some start pointer?
+    vb = offsetx[4] # [lowest] Some start pointer? 0x10 bytes for each element between middle and highest?
+    vc = offsetx[5] # [highest] Some end pointer [+4 / +8 on va?]
+    vd = offsetx[6] #FIXME: Use after figuring out what this is
+
+
+
+
+
 
     print("")
     print("")
@@ -303,8 +315,8 @@ def cs___smt_extract(f):
     while((common.offset - offsetx[0]) < head[4]):
       tmp = {}
       tmp['unk0?'] = read_l(1, silent=True)[0]
-      tmp['a_collect4/5_index1?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
-      tmp['b_collect4/5_index2?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
+      tmp['a_collect4/5_index?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
+      tmp['b_collect4/5_index?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
       tmp['a_count?'] = read_l(1, silent=True)[0]
       tmp['b_count?'] = read_l(1, silent=True)[0]
       print(i, tmp)
@@ -603,95 +615,72 @@ def cs___smt_extract(f):
 
     print()
 
-    if False:
+    print(va,vb,vc)
 
-      for i in range(head[9]):
-        print(i)
-        print("vb_ptr", offsetx[0] + collect6[i]['vb_ptr'])
-        print("ib_ptr", offsetx[0] + collect6[i]['ib_ptr'])
-
-      print("vertices:", data_base + ptras[1])
-      print("indices:", 16 + ptrbs[1])
+    count1 = (vc - va) // 4
+    count2 = (va - vb) // 0x10
+    assert(count1 == count2)
+    assert(count1 == head2[0])
 
 
-    if False:
-
-      if True:
-        i = 0
-        common.offset = offsetx[0] + collect6[i]['ib_ptr']
-        print("Vertex buffers via index buffer pointer", common.offset, "(%d)" % collect6[i]['ib_ptr'])
-
-
-
-      if True:
-
-        print("fixup ", fixup, " for ", filename)
-        print(head)
-
-        #FIXME: This is *bad*; how to fix this?
-        print("Searching vb and ib pointers at ", common.offset, " (0x%X)" % common.offset)
-        while read_h(1)[0] == 0:
-          pass
-        common.offset -= 2
-        print("Done searching vb and ib pointers at ", common.offset, " (0x%X)" % common.offset)
-
-
-      if True:
-
-        print()
-        print("Vertex buffers", common.offset)
-        #FIXME: Use all loop members
-        for i in range(head[9]):
-          ptra,a1,a2,a3 = read_l(4) # offset to list + 3x zero
-          assert(a1 == 0)
-          assert(a2 == 0)
-          assert(a3 == 0)
-
-          # Vertices
-          common.push()
-          common.offset = ptra + 16
-          ptras = read_l(3)
-          assert(ptras[0] == 0)
-          assert(ptras[2] == 0)
-          common.pop()
-
-        print()
-        print("Index buffers", common.offset)
-        #FIXME: Use all loop members
-        for i in range(head[9]):
-
-          ptrb = read_l(1)[0] # offset to list
-
-          # Indices
-          common.push()
-          common.offset = ptrb + 16
-          ptrbs = read_l(3)
-          assert(ptrbs[0] == 0)
-          assert(ptrbs[2] == 0)
-          common.pop()
-
-        vb = data_base + ptras[1]
-        ib = 16 + ptrbs[1]
-      else:
-        vb = None
-        ib = None
+    if True:
 
       print()
-      print("vertices:", vb)
-      print("indices:", ib)
+      common.offset = vb + 0x10
+      print("Vertex buffers", common.offset)
+      #FIXME: Use all loop members
+      ptrass = []
+      for i in range(head2[0]):
+        ptra,a1,a2,a3 = read_l(4) # offset to list + 3x zero
+        assert(a1 == 0)
+        assert(a2 == 0)
+        assert(a3 == 0)
+
+        # Vertices
+        common.push()
+        common.offset = ptra + 0x10
+        ptras = read_l(3)
+        assert(ptras[0] == 0)
+        assert(ptras[2] == 0)
+        common.pop()
+
+        ptrass += [ptras[1]]
+
+      print()
+      common.offset = va + 0x10
+      print("Index buffers", common.offset)
+      #FIXME: Use all loop members
+      ptrbss = []
+      for i in range(head2[0]):
+
+        ptrb = read_l(1)[0] # offset to list
+
+        # Indices
+        common.push()
+        common.offset = ptrb + 0x10
+        ptrbs = read_l(3)
+        assert(ptrbs[0] == 0)
+        assert(ptrbs[2] == 0)
+        common.pop()
+
+        ptrbss += [ptrbs[1]]
+
 
       if True:
           
         print()
         print("Exporting")
 
-        real_offset = common.offset
+        real_offset = common.offset         
 
-        def export_mesh(path, draw_type, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
+        obj_vertex_index = 1
+        fo = open("/tmp/or2/%s/cs___smt/offset-0x%X.obj" % (filename, offsetx[0]), "wb")
+
+        def export_mesh(draw_type, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
+          global fo
+          global obj_vertex_index
 
           real_offset = common.offset
-
-          fo = open(path, "wb")
 
           #vertex_size = 24
 
@@ -717,33 +706,57 @@ def cs___smt_extract(f):
           elif draw_type == 5:
             #FIXME: Untested
             for i in range(draw_count//3):
-              fo.write(b"f %d %d %d\n" % (1+indices[3*i+0], 1+indices[3*i+1], 1+indices[3*i+2]))
+              fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[3*i+0], obj_vertex_index+indices[3*i+1], obj_vertex_index+indices[3*i+2]))
           elif draw_type == 6:
             for i in range(draw_count): #FIXME: Is this 1/2 too many?
               if i % 2:
-                fo.write(b"f %d %d %d\n" % (1+indices[1+i], 1+indices[0+i], 1+indices[2+i]))
+                fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[1+i], obj_vertex_index+indices[0+i], obj_vertex_index+indices[2+i]))
               else:
-                fo.write(b"f %d %d %d\n" % (1+indices[0+i], 1+indices[1+i], 1+indices[2+i]))
+                fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[0+i], obj_vertex_index+indices[1+i], obj_vertex_index+indices[2+i]))
           elif draw_type == 8:
             #FIXME: Untested
             for i in range(draw_count//4):
-              fo.write(b"f %d %d %d %d\n" % (1+indices[4*i+0], 1+indices[4*i+1], 1+indices[4*i+2], 1+indices[4*i+3]))
+              fo.write(b"f %d %d %d %d\n" % (obj_vertex_index+indices[4*i+0], obj_vertex_index+indices[4*i+1], obj_vertex_index+indices[4*i+2], obj_vertex_index+indices[4*i+3]))
 
+          obj_vertex_index += vertex_count
 
           common.offset = real_offset
 
         # Use draw call information
 
-        unk_collect4 = collect4[0]
-        draw_call = collect5[0]
-        mesh = collect6[0]
-        textures = collect7[0]
+        for _i2 in range(len(collect2)):
+          i2 = _i2
 
-        assert(draw_call['index_offset'] == 0)
-        #assert(draw_call['unk0?'] == 0x697)
+          unk_collect2 = collect2[i2]
 
-        print(collect6)
-        export_mesh("/tmp/or2/%s/cs___smt/draw-call-0x%X.obj" % (filename, real_offset), draw_call['primitive_type'], draw_call['index_count'], mesh['vb_size'], mesh['ib_size'], mesh['vertex_size'], vb, ib)
+          for _i3 in range(unk_collect2['a_count?']):
+            i3 = unk_collect2['a_collect3_index?'] + _i3
+
+            unk_collect3 = collect3[i3]
+
+            #FIXME: Also do for b_count?
+            for l4 in ['a','b']:
+              for _i4 in range(unk_collect3[l4 + '_count?']):
+                i4 = unk_collect3[l4 + '_collect4/5_index?'] + _i4
+
+                unk_collect4 = collect4[i4]
+                draw_call = collect5[unk_collect4['collect5_index?']]
+                mesh = collect6[unk_collect3['unk0?']]
+                textures = collect7[unk_collect4['collect5_index?']]
+
+                vb = data_base + ptrass[unk_collect3['unk0?']]
+                ib = ptrbss[unk_collect3['unk0?']] + 0x10
+
+                print()
+                print("vertices:", vb)
+                print("indices:", ib)
+
+                #assert(draw_call['index_offset'] == 0)
+                #assert(draw_call['unk0?'] == 0x697)
+
+                print(collect6)
+                fo.write(("o collect2[%s];collect3[%s];collect4%s[%s]\n" % (i2, i3, l4, i4)).encode('ascii'))
+                export_mesh(draw_call['primitive_type'], draw_call['index_count'], mesh['vb_size'], mesh['ib_size'], mesh['vertex_size'], vb + mesh['vertex_size'] * unk_collect4['unk0?'], ib + draw_call['index_offset'] * 2)
 
         common.offset = real_offset
 

@@ -227,31 +227,79 @@ def coli_extract(f):
   print("Spline?")
   print()
   if True:
-    read_l(5)
+
+# Courses:
+#00000001;00000008;00000000;00000001;00000000
+#00000283
+#
+#FFFFFFFF;FFFFFFFF
+#00000000
+#
+#FFFFFFFF;FFFFFFFF
+#00000000
+#
+#FFFFFFFF;FFFFFFFF
+#00000284
+
+# BK
+#00000004;00000014;00000F68;00001EBC;00002270
+#00000064
+
+#00000001;00000000
+#000000F1
+
+#FFFFFFFF;FFFFFFFF
+#00000000
+
+#FFFFFFFF;FFFFFFFF
+#00000000
+
+
+
+
+    heada, headb, headc, headd= read_l(4)
     something_else_count = read_l(1)[0]
-    read_l(3)
-
-    read_l(3)
-    read_l(2)
-    something_else_count2 = read_l(1)[0]
-    print(something_else_count, something_else_count2)
-
-    assert(something_else_count <= something_else_count2)
-
-    print(common.offset)
+    print()
 
 
-    # Some smaller items with 16 bytes each
-    spline = []
-    for i in range(something_else_count2):
-      pos = read_f(3) # Spline coordinates maybe? Seems to follow ideal route [not center?]
-      unk0 = read_l(1)[0]
-      assert(unk0 == 0xFFFFFFFF)
+    stored['spline?'] = []
 
-      spline += [{"position": pos, "unk0": unk0}]
+    for xxx in range(heada):
 
-      print(i)
-    stored['spline?'] = spline
+      #FIXME: heada * heada is probably wrong; but it seems to work for now?
+      read_l(heada)
+      print()
+
+      read_l(2)
+      something_else_count3 = read_l(1)[0]
+      print()
+
+      unka = read_l(2)
+      read_l(1)[0]
+      print()
+
+      unkb = read_l(2)
+      something_else_count2 = read_l(1)[0]
+      print()
+
+      print(something_else_count, something_else_count3, something_else_count2)
+
+      #assert(something_else_count <= something_else_count2)
+
+      print(common.offset)
+
+
+      # Some smaller items with 16 bytes each
+      spline = []
+      for i in range(something_else_count2):
+        pos = read_f(3) # Spline coordinates maybe? Seems to follow ideal route [not center?]
+        unk0 = read_l(1)[0]
+        assert(unk0 == 0xFFFFFFFF)
+
+        spline += [{"position": pos, "unk0": unk0}]
+
+        print(i)
+      stored['spline?'] += [spline]
 
     print(common.offset)
 
@@ -267,13 +315,14 @@ def coli_extract(f):
     0: b""
   }
 
-  fo = open("/tmp/or2/%s/coli/spline.obj" % (filename), "wb")
-  for i, tmp in enumerate(stored['spline?']):
-    fo.write(b"v %f %f %f\n" % tmp['position'])
-  fo.write(b"l")
-  for i in range(len(stored['spline?'])):
-    fo.write(b" %d" % (1+i))
-  fo.write(b"\n")
+  for i, tmps in enumerate(stored['spline?']):
+    fo = open("/tmp/or2/%s/coli/spline-%d.obj" % (filename, i), "wb")
+    for j, tmp in enumerate(tmps):
+      fo.write(b"v %f %f %f\n" % tmp['position'])
+    fo.write(b"l")
+    for i in range(len(tmps)):
+      fo.write(b" %d" % (1+i))
+    fo.write(b"\n")
 
   fo = open("/tmp/or2/%s/coli/collision_mesh.mtl" % (filename), "wb")
   for s1 in surfs:
@@ -295,8 +344,8 @@ def coli_extract(f):
 
     #fo.write(b"g 0x%04X:0x%04X\n" % (indices[i*2+0],indices[i*2+1]))
 
-    #fo.write(b"usemtl 0x%02X-%s\n" % (s1, surfs[s1][0]))
-    fo.write(b"usemtl 0x%02X-%s\n" % (s2, surfs2[0]))
+    fo.write(b"usemtl 0x%02X-%s\n" % (s1, surfs[s1][0]))
+    #fo.write(b"usemtl 0x%02X-%s\n" % (s2, surfs2[0]))
     #fo.write(b"usemtl 0x%X:%X\n" % (i1[0], i1[1])) # ???
     #fo.write(b"usemtl 0x%X\n" % (i2))
 

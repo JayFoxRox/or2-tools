@@ -212,7 +212,7 @@ def cs___smt_extract(f):
 
     if export_objs:
       fo = open("/tmp/or2/%s/cs___smt/objects-0x%X.obj" % (filename, offsetx[0]), "wb")
-      for tmp in objects:
+      for i, tmp in enumerate(objects):
         fo.write(b"usemtl 0x%08X\n" % tmp['unk0_flags?'])
         def rot(v, angle, f):
           angle *= math.pi / 180.0

@@ -5,7 +5,7 @@ offset = 0
 data = None
 base = 0
 
-disable_tags = True
+disable_tags = False
 
 def read_t(count, ty, fmt, comment=None, silent=False):
   global offset

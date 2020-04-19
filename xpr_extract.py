@@ -141,6 +141,8 @@ def xpr_extract(f):
 
   open("/tmp/or2/%s/weird.bin" % (filename), 'wb').write(xpr[header_size:header_size+weird])
 
+  fo = open("/tmp/or2/%s/xpr/xpr.mtl" % (filename), "wb")
+
   i = 0
   offset = 12
   while True:
@@ -221,6 +223,11 @@ def xpr_extract(f):
       im = im.transpose(PIL.Image.FLIP_TOP_BOTTOM)
       if export_png:
         im.save("/tmp/or2/%s/xpr/%d-texture-0-0-%X.png" % (filename, i, fmt_type))
+
+
+      fo.write(b"newmtl texture-%d\n" % i)
+      fo.write(b"map_Kd ../xpr/%d-texture-0-0-%X.png\n" % (i, fmt_type))
+      
 
       #FIXME: Export DDS instead?
 

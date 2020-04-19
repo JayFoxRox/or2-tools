@@ -14,12 +14,17 @@ read_b = common.read_b
 export_tags = True
 
 fo = None
-obj_vertex_index = None
+obj_v_index = None
+obj_vt_index = None
+obj_vn_index = None
+tex_unit_index = 0
 
 def cs___smt_extract(f):
 
   global fo
-  global obj_vertex_index
+  global obj_v_index
+  global obj_vt_index
+  global obj_vn_index
 
   # Designed for CS_CS_1A_SMT.GZ   weird.bin
 
@@ -314,13 +319,12 @@ def cs___smt_extract(f):
     i = 0
     while((common.offset - offsetx[0]) < head[4]):
       tmp = {}
-      tmp['unk0?'] = read_l(1, silent=True)[0]
+      tmp['collect6_index?'] = read_l(1, silent=True)[0]
       tmp['a_collect4/5_index?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
       tmp['b_collect4/5_index?'] = read_l(1, silent=True)[0] # Optional index into collect4/5?
       tmp['a_count?'] = read_l(1, silent=True)[0]
       tmp['b_count?'] = read_l(1, silent=True)[0]
       print(i, tmp)
-      assert(tmp['unk0?'] in [0,1,2,3,4])
       assert(tmp['a_count?'] in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,64])
       assert(tmp['b_count?'] in [0,1,2,3,4,5,  6,7,9,10,11,40]) # 4 and 5 are rare; 6 and up are only in OBJ_ but not in CS_
       collect3 += [tmp]
@@ -335,7 +339,7 @@ def cs___smt_extract(f):
     i = 0
     while((common.offset - offsetx[0]) < head[5]):
       tmp = {}
-      tmp['unk0?'] = read_l(1, silent=True)[0] # index offset like collect5 [but different splits?]
+      tmp['vertex_offset'] = read_l(1, silent=True)[0] # index offset like collect5 [but different splits?]
       tmp['collect7_index?'] = read_l(1, silent=True)[0]
       tmp['collect5_index?'] = read_l(1, silent=True)[0] # Index into collect5?
       tmp['unk3_boolean?'] = read_l(1, silent=True)[0] # Some boolean?
@@ -673,12 +677,23 @@ def cs___smt_extract(f):
 
         real_offset = common.offset         
 
-        obj_vertex_index = 1
+        obj_v_index = 1
+        obj_vt_index = 1
+        obj_vn_index = 1
         fo = open("/tmp/or2/%s/cs___smt/offset-0x%X.obj" % (filename, offsetx[0]), "wb")
+        fo.write(b"s 1\n")
+        fo.write(b"mtllib ../xpr/xpr.mtl\n")
 
-        def export_mesh(draw_type, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
+        def sanitize(f):
+          if math.isnan(f):
+            return 0.0 #FIXME: WHY?!
+          return f
+
+        def export_mesh(draw_type, fvf, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
           global fo
-          global obj_vertex_index
+          global obj_v_index
+          global obj_vt_index
+          global obj_vn_index
 
           real_offset = common.offset
 
@@ -691,12 +706,85 @@ def cs___smt_extract(f):
           assert(index_buf_size % 2 == 0)
           index_count = index_buf_size // 2
 
+          #FIXME: Fix <SPECIAL> mode
+          if fvf == 0:
+            assert(False)
+
+          has_normal = False
+          has_texture = False
+
           #FIXME: Where to get the vertex count?
           common.offset = vertex_ptr
           for i in range(vertex_count):
-            v = read_f(3, silent=True)
-            read_l((vertex_size - 12) // 4, silent=True)
-            fo.write(b"v %f %f %f\n" % v)
+
+            fo.write(b"# %d %d 0x%X\n" % (common.offset, vertex_size, fvf))
+
+            p = read_f(3, silent=True)
+            fo.write(b"v %f %f %f\n" % p)
+
+            if True:
+
+              #FIXME: Weight betas support
+              if fvf & 0xE == 0x2:
+                betas = 0
+              elif fvf & 0xE == 0x6:
+                betas = 1
+              elif fvf & 0xE == 0x8:
+                betas = 2
+              elif fvf & 0xE == 0xA:
+                betas = 3
+              else:
+                assert(False)
+
+              for j in range(betas):
+                read_f(1, silent=True)[0]
+
+              if fvf & 0x10:
+                n = read_l(1, silent=True)[0]
+                nx = (n >> 0) & ((1 << 11) - 1)
+                ny = (n >> 11) & ((1 << 11) - 1)
+                nz = (n >> 22) & ((1 << 10) - 1)
+                nx -= (nx & (1 << 10)) << 1
+                ny -= (ny & (1 << 10)) << 1
+                nz -= (nz & (1 << 9)) << 1
+                nz = nz * 2
+                fo.write(b"vn %d %d %d\n# 0x%08X\n" % (nx,ny,nz,n))
+                has_normal = True
+
+              if fvf & 0x40:
+                #FIXME: Diffuse color
+                read_l(1, silent=True)
+
+              texture_count = (fvf & 0xF00) >> 8
+              for j in range(texture_count):
+                u, v = read_f(2, silent=True)
+                if j == tex_unit_index:
+                  pass
+                  fo.write(b"vt %f %f\n" % (sanitize(u), sanitize(v)))
+                  has_texture = True
+            else:
+              read_l((vertex_size - 12) // 4, silent=True)
+              
+
+          def emit_index(i):
+            global fo
+            fo.write(b" %d" % (obj_v_index+i))
+
+            if has_texture:
+              fo.write(b"/%d" % (obj_vt_index+i))
+            else:
+              if has_normal:
+                fo.write(b"/")
+
+            if has_normal:    
+              fo.write(b"/%d" % (obj_vn_index+i))      
+          
+          def emit_face(ls):
+            global fo
+            fo.write(b"f")
+            for l in ls:
+              emit_index(l)
+            fo.write(b"\n")
 
           #FIXME: Display the full index buffer?
           common.offset = index_ptr
@@ -706,19 +794,23 @@ def cs___smt_extract(f):
           elif draw_type == 5:
             #FIXME: Untested
             for i in range(draw_count//3):
-              fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[3*i+0], obj_vertex_index+indices[3*i+1], obj_vertex_index+indices[3*i+2]))
+              emit_face([indices[3*i+0], indices[3*i+1], indices[3*i+2]])
           elif draw_type == 6:
             for i in range(draw_count): #FIXME: Is this 1/2 too many?
               if i % 2:
-                fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[1+i], obj_vertex_index+indices[0+i], obj_vertex_index+indices[2+i]))
+                emit_face([indices[1+i], indices[0+i], indices[2+i]])
               else:
-                fo.write(b"f %d %d %d\n" % (obj_vertex_index+indices[0+i], obj_vertex_index+indices[1+i], obj_vertex_index+indices[2+i]))
+                emit_face([indices[0+i], indices[1+i], indices[2+i]])
           elif draw_type == 8:
             #FIXME: Untested
             for i in range(draw_count//4):
-              fo.write(b"f %d %d %d %d\n" % (obj_vertex_index+indices[4*i+0], obj_vertex_index+indices[4*i+1], obj_vertex_index+indices[4*i+2], obj_vertex_index+indices[4*i+3]))
+              emit_face([indices[4*i+0], indices[4*i+1], indices[4*i+2], indices[4*i+3]])
 
-          obj_vertex_index += vertex_count
+          obj_v_index += vertex_count
+          if has_texture:
+            obj_vt_index += vertex_count
+          if has_normal:
+            obj_vn_index += vertex_count
 
           common.offset = real_offset
 
@@ -738,25 +830,35 @@ def cs___smt_extract(f):
             for l4 in ['a','b']:
               for _i4 in range(unk_collect3[l4 + '_count?']):
                 i4 = unk_collect3[l4 + '_collect4/5_index?'] + _i4
-
                 unk_collect4 = collect4[i4]
-                draw_call = collect5[unk_collect4['collect5_index?']]
-                mesh = collect6[unk_collect3['unk0?']]
-                textures = collect7[unk_collect4['collect5_index?']]
 
-                vb = data_base + ptrass[unk_collect3['unk0?']]
-                ib = ptrbss[unk_collect3['unk0?']] + 0x10
+                i5 = unk_collect4['collect5_index?']
+                i6 = unk_collect3['collect6_index?']
+                i7 = unk_collect4['collect7_index?']
+
+                mesh = collect6[i6]
+                draw_call = collect5[i5]
+                textures = collect7[i7]
+
+                vb = data_base + ptrass[i6]
+                ib = ptrbss[i6] + 0x10
 
                 print()
                 print("vertices:", vb)
                 print("indices:", ib)
 
+                #FIXME: Handle transform
+                fo.write(b"usemtl texture-%d\n" % (textures['units'][tex_unit_index]['texture_index']))
+
                 #assert(draw_call['index_offset'] == 0)
                 #assert(draw_call['unk0?'] == 0x697)
 
+                ib_skip = draw_call['index_offset'] * 2
+                vb_skip = mesh['vertex_size'] * unk_collect4['vertex_offset']
+
                 print(collect6)
                 fo.write(("o collect2[%s];collect3[%s];collect4%s[%s]\n" % (i2, i3, l4, i4)).encode('ascii'))
-                export_mesh(draw_call['primitive_type'], draw_call['index_count'], mesh['vb_size'], mesh['ib_size'], mesh['vertex_size'], vb + mesh['vertex_size'] * unk_collect4['unk0?'], ib + draw_call['index_offset'] * 2)
+                export_mesh(draw_call['primitive_type'], mesh['fvf?'], draw_call['index_count'], mesh['vb_size'] - vb_skip, mesh['ib_size'] - ib_skip, mesh['vertex_size'], vb + vb_skip, ib + ib_skip)
 
         common.offset = real_offset
 

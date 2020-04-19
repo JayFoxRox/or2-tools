@@ -27,7 +27,7 @@ if __name__ == "__main__":
       assert(False)
     gz_f.name = f.name
 
-    if False:
+    if True:
       gz_f.seek(0)
       xpr_extract(gz_f)
 

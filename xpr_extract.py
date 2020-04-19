@@ -49,6 +49,7 @@ def xpr_extract(f):
 
     print(filename[-7:])
     #FIXME: Where to find this?
+    #FIXME: Answer: See logic in cs__smt_extract.py
     xpr_offset = data.find(b'XPR0')
     assert(xpr_offset != -1)
 

@@ -11,12 +11,13 @@ read_l = common.read_l
 read_h = common.read_h
 read_b = common.read_b
 
-export_tags = False
+export_tags = True
 
 def cs___smt_extract(f):
 
   # Designed for CS_CS_1A_SMT.GZ   weird.bin
 
+  common.regions = []
   common.data = f.read()
   common.offset = 0
 
@@ -25,16 +26,65 @@ def cs___smt_extract(f):
   os.makedirs("/tmp/or2/%s/cs___smt/" % (filename), exist_ok=True)
 
   #FIXME: Read other header fields
-  #FIXME: this should be a global?
-  data_base = struct.unpack_from("<L", common.data, 8)[0] + 16
+    
+  unk0, unk4, weird, unkC = read_l(4)
+  data_base = weird + 0x10
+  assert(data_base == (struct.unpack_from("<L", common.data, 8)[0] + 16))
+
 
   offsets = []
 
-  #FIXME: Hardcoded for CS_CS_1A_SMT.GZ weird.bin
-  # offsets of FFFFFFFFFFFFFFFFFFFFFFFF patterns in file
-
+  # OBJ_*_SMT
   if True:
-    ranges = []
+    zzz = read_l(1)[0]
+    assert(zzz == 0)
+    head2 = read_l(2)
+    assert(head2[0] == unk0)
+    assert(head2[1] == unk4)
+    zzz4 = read_l(4)
+    assert(list(zzz4) == [0]*4)
+    print()
+
+    cy = 0
+    for j in range(head2[0]):
+      print()
+
+      va,vb,vc = read_l(3)
+
+      vd = read_l(1)[0]
+      #assert(vd == 0) # Typically true, but not always
+
+      ve,vf = read_l(2) # Header pointers
+      assert(ve == vf)
+
+      vg = read_l(1)[0] # Collection pointer?
+      assert(vg == ve + 0x30)
+
+      vh, vi, vj, vk, vl, vm, vn = read_l(7)
+
+      vo = read_l(1)[0] # Always zero
+      assert(vo == 0)
+
+      offsets += [(ve + 0x10, 0, 0, va, vb, vc, vd)]
+
+      cy += 1
+      print(cy)
+
+    off = common.data.find(b'XPR0')
+    pad = (off - common.offset) // 4
+    assert(pad == head2[1])
+    print(pad)
+    for i in range(pad):
+      v = read_l(1)[0]
+      assert(v == 0)
+
+  print()
+  print(common.offset)
+
+  #FIXME: This is a stupid heuristic
+  # offsets of FFFFFFFFFFFFFFFFFFFFFFFF patterns in file
+  ranges = []
+  if False:
     of = 0
     while((of + 56) < len(common.data)):
       ofa = common.data.find(bytes([0xFF]*12), of + 56)
@@ -55,63 +105,54 @@ def cs___smt_extract(f):
       fixup = 16 #FIXME: For OBJ_
       ranges += [(ofa+fixup, ofb+fixup, fixup)]
 
-      
-  else:
-    ranges = [
-      (92, 8604),
-      (54308, 55708),
-      (99026, 108826),
-      (209448, 211128),
-      (214264, 216392),
-      (223208, 243816),
-      (399734, 420622),
-      (590654, 609582),
-      (658286, 698662),
-
-      # 760732 Seems to have vertices with 64 bytes per element?
-
-      (867396, 870420)
-    ]
 
   for r in ranges:
     print(r)
-    offsets += [(r[0]-44-48,1+(r[1]-r[0])//56,0, r[2])]
+    offsets += [(r[0]-44-48,1+(r[1]-r[0])//56,r[2])]
 
-  #FIXME: Hardcoded for OBJ_MISSIONOBJ_SMT.GZ
-  if len(common.data) > 0x1000:
-    offsets += [(0x8f4,0,0)]
 
 
   for offsetx in offsets:
 
     common.offset = offsetx[0]
     counta = offsetx[1]
-    countb = offsetx[2]
     fixup = offsetx[2]
 
 
-    assert(common.offset - offsetx[0] == 0)
-    head = read_l(12)
+    va = offsetx[3]
+    vb = offsetx[4]
+    vc = offsetx[5]
+    vd = offsetx[6]
 
-    if head[0] != 48:
-      print("bad offset: 0x%X" % offsetx[0])
-      continue
+    print("")
+    print("")
+    print("")
+    print("")
+    print("")
+    print("%d = 0x%X" % (common.offset, common.offset))
+    print("")
+
+    assert(common.offset - offsetx[0] == 0)
+    head = read_l(9)
+    head2 = read_l(3)
+
+    print("")
+    print("%d %d" % (head[0], counta))
+    print("")
+
+    if False:
+      if head[0] != 0x30:
+        print("bad offset: 0x%X" % offsetx[0])
+        continue
 
     # This suggests that these are independent files
-    assert(head[0] == 48)
+    assert(head[0] == 0x30)
 
-    print("")
-    print("")
-    print("")
-    print("")
-    print("")
-    print("%d %d %d" % (common.offset, head[0], counta))
-    print("")
 
 
     objects = []
     print("")
-    print("Objects ?")
+    print("Objects ? (collect1)")
     print("")
     print(common.offset - offsetx[0], head[0])
     assert(common.offset - offsetx[0] == head[0])
@@ -272,8 +313,8 @@ def cs___smt_extract(f):
       #assert(tmp[1] in [0,1,2,3,4])
       #assert(tmp[2] in [0,1,2,3,4])
       print(i, tmp)
-      assert(tmp['collect7_index?'] < head[10]) # Some kind of texture lookup?
-      #assert(tmp['unk0?'][2] < head[10]) # Some kind of texture lookup?
+      assert(tmp['collect7_index?'] < head2[1]) # Some kind of texture lookup?
+      #assert(tmp['unk0?'][2] < head2[1]) # Some kind of texture lookup?
       assert(tmp['unk3_boolean?'] in [0,1])
       collect4 += [tmp]
       i += 1
@@ -289,10 +330,19 @@ def cs___smt_extract(f):
       tmp = {}
       tmp['primitive_type'] = read_l(1, silent=True)[0] # Type of draw call? [assert 6]
       tmp['index_offset'] = read_l(1, silent=True)[0] # Index offset?
-      tmp['index_count'] = read_l(1, silent=True)[0] # Count of vertices
-      tmp['unk0?'] = read_l(1, silent=True)[0] # unknown [similar to count of indices]
+      tmp['index_count'] = read_l(1, silent=True)[0] # Count of indices in draw call
+      tmp['unk0?'] = read_l(1, silent=True)[0] # unknown [similar to count of indices] # Count of unique vertices?
       print(i, tmp)
       collect5 += [tmp]
+      if tmp['primitive_type'] == 5:
+        assert(tmp['unk0?'] == tmp['index_count'])
+      elif tmp['primitive_type'] == 8:
+        assert(tmp['unk0?'] == tmp['index_count'])
+      elif tmp['primitive_type'] == 6:
+        assert(tmp['unk0?'] <= tmp['index_count'])
+        pass #assert([ tmp['index_count'], tmp['unk0?']] in [[25,20], [2,2], [144,96], [218,144], [70,48], [211,145], [864,412], [79,43], [10,6], [89,48], [21,16], [205,116], [87,45], [93,45]])
+      else:
+        assert(False)
       i += 1
 
     print(common.offset - offsetx[0], head[6])
@@ -328,11 +378,25 @@ def cs___smt_extract(f):
         if fvf & 0x2:
           fvf &= ~0x2
           fvf_meaning += ["XYZ"]
-          fvf_size += 12
+          fvf_size += 4*3
+
+        #FIXME: Seems to be bone related?
+        if fvf & 0x4:
+          fvf &= ~0x4
+          fvf_meaning += ["XYZW?"]
+          fvf_size += 4 #FIXME: Should be 16, but somehow happens with XYZ?
+
+        #FIXME: Seems to be bone related?
+        if fvf & 0x8:
+          fvf &= ~0x8
+          fvf_meaning += ["XYZB2?"]
+          fvf_size += 4*3 #FIXME: Should only be 2 floats?
+          if not "XYZ" in fvf_meaning:
+            fvf_size += 4*2
 
         if fvf & 0x10:
           fvf &= ~0x10
-          fvf_meaning += ["NORMAL"]
+          fvf_meaning += ["NORMAL?"]
           fvf_size += 4 #FIXME: Should be 12, but somehow forces compression on Xbox?
 
         if fvf & 0x40:
@@ -347,7 +411,7 @@ def cs___smt_extract(f):
           fvf_meaning += ["TEX%d" % texture_count]
           fvf_size += 8 * texture_count
 
-      print(fvf_meaning)
+      print(fvf_meaning, fvf_size, hex(fvf))
       assert(fvf == 0)
       assert(fvf_size == tmp['vertex_size'])
 
@@ -451,7 +515,7 @@ def cs___smt_extract(f):
 
         print("    unit%d: %s" % (j, tmp_texture))
         tmp['units'] += [tmp_texture]
-      assert(tmp['transform_index?'] < head[11])
+      assert(tmp['transform_index?'] < head2[2])
       collect7 += [tmp]
       i += 1
 
@@ -462,7 +526,7 @@ def cs___smt_extract(f):
     print("Collect8 (Transforms?)")
     print("")
     collect8 = []
-    for i in range(head[11]):
+    for i in range(head2[2]):
       tmp = {}
       tmp['unk0?'] = read_f(4, silent=True, comment=str(head[9:])) # Quaternion? Color?
       tmp['scale?'] = read_f(3, silent=True) # Scale?
@@ -670,12 +734,12 @@ def cs___smt_extract(f):
     #assert((len(objects) + len(matrices)) == len(collect3))
     #assert(len(collect2) == head[9])
     assert(len(collect4) == len(collect5))
-    assert(len(collect6) == head[9])
-    assert(len(collect7) == head[10])
-    assert(len(collect8) == head[11])
+    assert(len(collect6) == head2[0])
+    assert(len(collect7) == head2[1])
+    assert(len(collect8) == head2[2])
 
     if export_tags:
-      common.export_tags("/tmp/or2/%s/weird.bin.tags" % (filename))
+      common.export_tags("/tmp/or2/%s/decompressed.bin.tags" % (filename))
 
     if len(matrices) > 0:
       fo = open("/tmp/or2/%s/cs___smt/matrices.dae" % (filename), "wb")

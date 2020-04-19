@@ -5,6 +5,8 @@ import struct
 import math
 import os
 
+sys.setrecursionlimit(10000)
+
 import common
 read_f = common.read_f
 read_l = common.read_l
@@ -637,28 +639,29 @@ def cs___smt_extract(f):
         fo.write(b"s 1\n")
         fo.write(b"mtllib ../xpr/xpr.mtl\n")
 
-        def export_mesh(draw_type, fvf, draw_count, vertex_buf_size, index_buf_size, vertex_size, vertex_ptr, index_ptr):
-          global fo
-          global obj_v_index
-          global obj_vt_index
-          global obj_vn_index
+        # Export all vertices
+        vertex_bases = []
+        for i6 in range(len(collect6)):
+          mesh = collect6[i6]
 
-          real_offset = common.offset
+          vertex_bases += [(obj_v_index, obj_vt_index, obj_vn_index)]
 
-          #vertex_size = 24
+          vb = data_base + ptrass[i6]          
+          
+          fvf = mesh['fvf?']
+          vertex_buf_size = mesh['vb_size']
+          vertex_size = mesh['vertex_size'] 
 
           assert(vertex_buf_size % vertex_size == 0)
           vertex_count = vertex_buf_size // vertex_size
 
-          assert(index_buf_size % 2 == 0)
-          index_count = index_buf_size // 2
-
           #FIXME: We keep re-uploading a lot of the vertex buffer
           #print(draw_count, index_count, vertex_count)
 
-          #FIXME: Fix <SPECIAL> mode
+          #FIXME: Fix <SPECIAL> mode [44 bytes]
+          #FIXME: This should have the right size, but it will probably still be bad
           if fvf == 0:
-            assert(False)
+            fvf = 0x2 | 0x10 | 0x40 | 0x300 #FIXME: Guesswork
 
           #FIXME: Weight betas support
           if fvf & 0xE == 0x2:
@@ -679,7 +682,7 @@ def cs___smt_extract(f):
           has_texture = tex_unit_index < texture_count
 
           #FIXME: Where to get the vertex count?
-          common.offset = vertex_ptr
+          common.offset = vb
           for i in range(vertex_count):
 
             s = [] #b"# %d %d 0x%X\n" % (common.offset, vertex_size, fvf)
@@ -714,6 +717,25 @@ def cs___smt_extract(f):
 
 
             fo.write(b"".join(s))
+
+
+          obj_v_index += vertex_count
+          if has_texture:
+            obj_vt_index += vertex_count
+          if has_normal:
+            obj_vn_index += vertex_count
+
+        def export_mesh(draw_type, draw_count, index_buf_size, vertex_index, vertex_offset, index_ptr):
+          global fo
+          obj_v_index, obj_vt_index, obj_vn_index = vertex_index
+
+          real_offset = common.offset
+
+          #vertex_size = 24
+          
+
+          assert(index_buf_size % 2 == 0)
+          index_count = index_buf_size // 2
               
 
           def emit_index(i):
@@ -737,7 +759,7 @@ def cs___smt_extract(f):
             s = []
             s += [b"f"]
             for l in ls:
-              s += [emit_index(l)]
+              s += [emit_index(l+vertex_offset)]
             s += [b"\n"]
             fo.write(b"".join(s))
 
@@ -760,11 +782,7 @@ def cs___smt_extract(f):
           else:
             assert(False)
 
-          obj_v_index += vertex_count
-          if has_texture:
-            obj_vt_index += vertex_count
-          if has_normal:
-            obj_vn_index += vertex_count
+
 
           common.offset = real_offset
 
@@ -805,7 +823,6 @@ def cs___smt_extract(f):
                   draw_call = collect5[i5]
                   textures = collect7[i7]
 
-                  vb = data_base + ptrass[i6]
                   ib = ptrbss[i6] + 0x10
 
                   #FIXME: Handle transform
@@ -815,10 +832,9 @@ def cs___smt_extract(f):
                   #assert(draw_call['unk0?'] == 0x697)
 
                   ib_skip = draw_call['index_offset'] * 2
-                  vb_skip = mesh['vertex_size'] * unk_collect4['vertex_offset']
 
                   fo.write(("o c1[%s],c2[%s];c3[%s];c4%s[%s];c5[%s];c6[%s];c7[%s]\n" % (i1, i2, i3, l4, i4, i5, i6, i7)).encode('ascii'))
-                  export_mesh(draw_call['primitive_type'], mesh['fvf?'], draw_call['index_count'], mesh['vb_size'] - vb_skip, mesh['ib_size'] - ib_skip, mesh['vertex_size'], vb + vb_skip, ib + ib_skip)
+                  export_mesh(draw_call['primitive_type'], draw_call['index_count'], mesh['ib_size'] - ib_skip, vertex_bases[i6], unk_collect4['vertex_offset'], ib + ib_skip)
 
           if unk_collect1['collect1_index1?'] != 0xFFFFFFFF:
             draw(unk_collect1['collect1_index1?'])

@@ -5,6 +5,8 @@ offset = 0
 data = None
 base = 0
 
+disable_tags = True
+
 def read_t(count, ty, fmt, comment=None, silent=False):
   global offset
   global regions
@@ -19,9 +21,10 @@ def read_t(count, ty, fmt, comment=None, silent=False):
   if size == 0:
     return ()
 
-  if comment == None:
-    comment = "unknown:%s" % ty[1:]
-  regions += [(offset, offset + size*count, comment)]
+  if not disable_tags:
+    if comment == None:
+      comment = "unknown:%s" % ty[1:]
+    regions += [(offset, offset + size*count, comment)]
 
   vs = struct.unpack_from(tys, data, offset)
   offset += size
@@ -48,6 +51,9 @@ def read_f(count, comment=None, silent=False):
   return read_t(count, "f", "%+.5f", comment, silent) 
 
 def export_tags(path):
+  if disable_tags:
+    print("Warning: Tags disabled!")
+    return
   fo=open(path, "wb")
   fo.write(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
   fo.write(b"<wxHexEditor_XML_TAG>\n")

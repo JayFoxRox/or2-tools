@@ -136,6 +136,13 @@ def cs___smt_extract(f):
     head = read_l(9)
     head2 = read_l(3)
 
+    # global-header for this offset: [...some fields not in local header...]
+    #                                00000914;         0000094C;00000954;00000968;00000978;00000988;000009B4;00000A0C
+    # local-header in `head`:        00000030;00000068;00000068;00000070;00000084;00000094;000000A4;000000D0;00000128
+    #                                00000001;00000001;00000001
+    # So this local header is just the same
+
+
     print("")
     print("%d %d" % (head[0], counta))
     print("")
@@ -149,6 +156,14 @@ def cs___smt_extract(f):
     assert(head[0] == 0x30)
 
 
+    #FIXME: Finds OBJ_COURSE_OBJ_CS_1A_R_SMT.GZ:
+    # head1: 00000030;00000068;00000068;00000068;00000068;00000068;00000068;00000068;00000068
+    # head2: 00000000;00000000;00000000
+    if (list(head2) == [0]*3):
+      print("Broken object?!")
+      continue
+
+
 
     objects = []
     print("")
@@ -157,6 +172,7 @@ def cs___smt_extract(f):
     print(common.offset - offsetx[0], head[0])
     assert(common.offset - offsetx[0] == head[0])
     i = 0
+    tmp = None
     while((common.offset - offsetx[0]) < head[1]): # Similar to counta?
 
       tmp = {}
@@ -176,7 +192,7 @@ def cs___smt_extract(f):
       print(hex(tmp['unk0_flags?']))
       assert(tmp['unk0_flags?'] in [0x001,0x002,0x003,0x005,            0x009,
                                     0x011,            0x015,            0x019,
-                                    0x021,      0x023,      0x026,            0x02A,
+                                    0x021,      0x023,0x025,0x026,      0x029,0x02A,
                                     0x041,0x042,0x043,0x045,0x046,      0x049,0x04A,
                                     0x051,
                                     0x061,      0x063,0x065,0x066,0x067,0x069,0x06A,0x06B,
@@ -220,6 +236,9 @@ def cs___smt_extract(f):
       objects += [tmp]
       i += 1
 
+    if tmp != None:
+      assert(tmp['collect1_index?'] == 0xFFFFFFFF)
+
     fo = open("/tmp/or2/%s/cs___smt/objects-0x%X.obj" % (filename, offsetx[0]), "wb")
     for tmp in objects:
       fo.write(b"usemtl 0x%08X\n" % tmp['unk0_flags?'])
@@ -239,7 +258,6 @@ def cs___smt_extract(f):
       fo.write(b"v %f %f %f\n" % tuple(rot(tmp['position'], tmp['unk1?']+270.0, 0.0)))
       fo.write(b"f %d %d %d %d\n" % (1+i*4,2+i*4,3+i*4,4+i*4))
 
-    assert(tmp['collect1_index?'] == 0xFFFFFFFF)
 
     matrices = []
     print("")
@@ -291,7 +309,7 @@ def cs___smt_extract(f):
       tmp['b_count?'] = read_l(1, silent=True)[0]
       print(i, tmp)
       assert(tmp['unk0?'] in [0,1,2,3,4])
-      assert(tmp['a_count?'] in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,24,25,26,27,28,29,30,31,32,64])
+      assert(tmp['a_count?'] in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,64])
       assert(tmp['b_count?'] in [0,1,2,3,4,5,  6,7,9,10,11,40]) # 4 and 5 are rare; 6 and up are only in OBJ_ but not in CS_
       collect3 += [tmp]
       i += 1
@@ -375,28 +393,28 @@ def cs___smt_extract(f):
       else:
         fvf_size = 0
 
-        if fvf & 0x2:
+
+        if fvf & 0xE == 0x2:
           fvf &= ~0x2
           fvf_meaning += ["XYZ"]
           fvf_size += 4*3
-
-        #FIXME: Seems to be bone related?
-        if fvf & 0x4:
-          fvf &= ~0x4
-          fvf_meaning += ["XYZW?"]
-          fvf_size += 4 #FIXME: Should be 16, but somehow happens with XYZ?
-
-        #FIXME: Seems to be bone related?
-        if fvf & 0x8:
+        if fvf & 0xE == 0x6:
+          fvf &= ~0x6
+          fvf_meaning += ["XYZB1"]
+          fvf_size += 4*3+1*4
+        if fvf & 0xE == 0x8:
           fvf &= ~0x8
-          fvf_meaning += ["XYZB2?"]
-          fvf_size += 4*3 #FIXME: Should only be 2 floats?
-          if not "XYZ" in fvf_meaning:
-            fvf_size += 4*2
+          fvf_meaning += ["XYZB2"]
+          fvf_size += 4*3+2*4
+        if fvf & 0xE == 0xA:
+          fvf &= ~0xA
+          fvf_meaning += ["XYZB3"]
+          fvf_size += 4*3+3*4
+
 
         if fvf & 0x10:
           fvf &= ~0x10
-          fvf_meaning += ["NORMAL?"]
+          fvf_meaning += ["NORMAL"]
           fvf_size += 4 #FIXME: Should be 12, but somehow forces compression on Xbox?
 
         if fvf & 0x40:
@@ -441,6 +459,9 @@ def cs___smt_extract(f):
         tmp_texture['unk2?'] = read_l(1, silent=True)[0] # Almost float or memory address?
         tmp_texture['unknown_f'] = read_f(1, silent=True)[0]
         tmp_texture['texture_index'] = read_l(1, silent=True)[0] # texture index
+
+        print("    unit%d: %s" % (j, tmp_texture))
+        tmp['units'] += [tmp_texture]
 
         #print("0x%08X, #WTFREMOVEME" % tmp_texture['unk0?'])
         assert(tmp_texture['unk0?'] in [
@@ -494,6 +515,7 @@ def cs___smt_extract(f):
 0x004C9000,
 0x004DB000,
 0x00C89000,
+0x06099000,
 0x06289000,
 0x06299000,
 0x0629B000,
@@ -513,8 +535,6 @@ def cs___smt_extract(f):
         #assert(tmp_texture['unk2?'] % 0x200000 == 0) # Broken by 0xBF333333, 0xBF4CCCCD
         assert(tmp_texture['unk2?'] in [0x00000000, 0xBF000000, 0xBF333333, 0xBF4CCCCD, 0xBF800000, 0xBFC00000, 0xC0000000, 0xC0200000, 0xC0400000, 0xC0600000, 0xC0800000])
 
-        print("    unit%d: %s" % (j, tmp_texture))
-        tmp['units'] += [tmp_texture]
       assert(tmp['transform_index?'] < head2[2])
       collect7 += [tmp]
       i += 1

@@ -5,7 +5,7 @@ import struct
 import math
 import os
 
-import common
+from . import common
 read_f = common.read_f
 read_l = common.read_l
 read_h = common.read_h

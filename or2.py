@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 
-from gz_extract import *
-from xpr_extract import *
-from coli_extract import *
-from cs___smt_extract import *
-from obj___smt_extract import *
-from sin_extract import *
-from bin_extract import *
+from outrun2.gz_extract import *
+from outrun2.xpr_extract import *
+from outrun2.coli_extract import *
+from outrun2.cs___smt_extract import *
+from outrun2.obj___smt_extract import *
+from outrun2.sin_extract import *
+from outrun2.bin_extract import *
+
+try:
+  import bpy
+  is_blender = True
+except:
+  is_blender = False
 
 import io
 import os
@@ -16,7 +22,22 @@ GAME_OR2006 = 2
 game = None
 
 if __name__ == "__main__":
-  for path in sys.argv[1:]:
+
+  if not is_blender:
+    argi = 1
+  else:
+    for argi, arg in enumerate(sys.argv):
+      if arg == "--":
+        break
+    argi += 1
+  print(argi)
+  args = sys.argv[argi:]
+
+  print(args)
+
+  for path in args:
+
+    
 
     f = open(path, 'rb')
 

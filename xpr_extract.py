@@ -69,17 +69,17 @@ def xpr_extract(f):
     weird += 16
     assert(weird + unkC == len(data))
 
-  elif filename[0:3] == "CS_":
+  elif filename[0:3].upper() == "CS_":
 
     print(filename[-7:])
     #FIXME: Where to find this?
     xpr_offset = data.find(b'XPR0')
 
-    if filename[-7:] == "_SIN.GZ":
+    if filename[-7:].upper() == "_SIN.GZ":
       print("CS_*_SIN has no XPR?")
       assert(xpr_offset == -1)
       return
-    elif filename[-7:] == "_BIN.GZ":
+    elif filename[-7:].upper() == "_BIN.GZ":
       print("CS_*_BIN has no XPR?")
       assert(xpr_offset == -1)
       return
@@ -129,7 +129,7 @@ def xpr_extract(f):
   print("Leftover: %d" % (len(xpr) - size))
 
   assert(size <= len(xpr))
-  assert(header_size % 0x800 == 0)
+  #assert(header_size % 0x800 == 0)
 
 
   open("/tmp/or2/%s/xpr-header.bin" % (filename), 'wb').write(xpr[0:header_size])
@@ -145,7 +145,7 @@ def xpr_extract(f):
 
   i = 0
   offset = 12
-  while True:
+  while offset < header_size:
 
     flags = struct.unpack_from("<L", xpr, offset)[0]
 
@@ -245,7 +245,9 @@ def xpr_extract(f):
       assert(False)
 
     i += 1
-    
+  
+  #FIXME: If this is not true, then we have to assert 0xFFFFFFFF as last type and padding
+  #assert(offset == header_size)
 
   print(magic, size, header_size)
 

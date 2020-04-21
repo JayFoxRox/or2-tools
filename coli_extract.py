@@ -13,6 +13,10 @@ read_b = common.read_b
 
 export_tags = True
 
+version = None
+VERSION_0105 = 0x0105
+VERSION_0200 = 0x0200
+
 def coli_extract(f):
 
   filename = os.path.basename(f.name)
@@ -31,12 +35,20 @@ def coli_extract(f):
     assert(v == tuple([0xFF]*align_size))
 
   magic = read_b(8)
-  assert(bytes(magic) == b"COLI0105")
+  if bytes(magic) == b"COLI0105":
+    version = VERSION_0105
+  elif bytes(magic) == b"COLI0200":
+    version = VERSION_0200
+  else:
+    assert(False)
 
   stored = {}
 
   face_count, something_count = read_l(2)
   unk10, unk14, unk18, unk1C, unk20, unk24, unk28, unk2C = read_l(8)
+
+  if version == VERSION_0200:
+    unk30 = read_l(1)[0] #FIXME: What is this?
 
   print(face_count, something_count)
   assert(something_count < face_count)
@@ -44,8 +56,14 @@ def coli_extract(f):
   print("0x%X 0x%X" % (unk10, unk14))
   assert(unk10 == 0x40)
 
-  magic_footer = read_b(16)
-  assert(bytes(magic_footer) == b"SEGA-AM2 OUTRUN2")
+  if version == VERSION_0105:
+    magic_footer = read_b(16)
+    assert(bytes(magic_footer) == b"SEGA-AM2 OUTRUN2")
+  elif version == VERSION_0200:
+    magic_footer = read_b(12)
+    assert(bytes(magic_footer) == b"NEW COLL FMT")
+  else:
+    assert(False)
 
   assert(common.offset == unk10)
 
@@ -141,13 +159,17 @@ def coli_extract(f):
     # Unknown
     u = read_l(1)
 
-    # Usually 1,1,1,1
-    x,y,z,w = read_f(4)
+    face = {'corners': (va,vb,vc,vd), 'center': v, 'unk': u }
 
-    print(x,y,z,w)
+    if version == VERSION_0105:
+      # Usually 1,1,1,1
+      x,y,z,w = read_f(4)
+      face['unkxyzw'] = (x,y,z,w)
+      print(x,y,z,w)
+
     print()
 
-    face = {'corners': (va,vb,vc,vd), 'center': v, 'unk': u, 'unkxyzw': (x,y,z,w)}
+     
 
     faces += [face]
 
@@ -303,6 +325,18 @@ def coli_extract(f):
 
     print(common.offset)
 
+
+  if version == VERSION_0200:
+    print(common.offset, unk30)
+    align()
+    assert(common.offset == unk30)
+
+    #FIXME: Broken?
+    for i in range(face_count+1):
+      read_b(4)
+
+    #FIXME: Broken!
+    read_l(6) # Seen 2, 4, 6 weird values
 
   print(common.offset, len(common.data))
   align()

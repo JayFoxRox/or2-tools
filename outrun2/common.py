@@ -1,4 +1,7 @@
 import struct
+import sys
+import traceback
+import os
 
 regions = []
 offset = 0
@@ -10,7 +13,6 @@ disable_tags = False
 def read_t(count, ty, fmt, comment=None, silent=False):
   global offset
   global regions
-  vs = []
 
   if count == 0:
     return ()
@@ -24,7 +26,11 @@ def read_t(count, ty, fmt, comment=None, silent=False):
   if not disable_tags:
     if comment == None:
       comment = "unknown:%s" % ty[1:]
-    regions += [(offset, offset + size*count, comment)]
+      trace = traceback.extract_stack(limit=None)
+      for t in trace[-3:-2]:
+        comment += " [%s:%d]" % (os.path.basename(t[0]), t[1])
+      
+    regions += [(offset, offset + size, comment)]
 
   vs = struct.unpack_from(tys, data, offset)
   offset += size

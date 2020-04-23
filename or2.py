@@ -7,6 +7,7 @@ from outrun2.cs___smt_extract import *
 from outrun2.obj___smt_extract import *
 from outrun2.sin_extract import *
 from outrun2.oso_extract import *
+from outrun2.scn_env_fog_extract import *
 from outrun2.bin_extract import *
 
 try:
@@ -79,6 +80,16 @@ if __name__ == "__main__":
         print("Skipping OSO for %s" % filename)
       else:
         oso_extract(gz_f)
+
+    if filename[0:12].upper() == "SCN_ENV_FOG_":
+      if game == GAME_OR2006:
+        #FIXME: Assert that the length is as expected
+        gz_f.seek(0)
+        print(struct.unpack("<L", gz_f.read(4))[0])
+        gz_f.seek(4)
+      else:
+        gz_f.seek(0)
+      scn_env_fog_extract(gz_f)
 
     if filename[0:3].upper() == "CS_":
 

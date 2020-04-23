@@ -45,7 +45,7 @@ def xpr_extract(f):
     weird += 8
     xpr_offset += 8
 
-  elif filename[0:4] == "OBJ_":
+  elif filename[0:4].upper() == "OBJ_":
 
     print(filename[-7:])
     #FIXME: Where to find this?

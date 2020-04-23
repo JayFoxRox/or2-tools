@@ -326,7 +326,7 @@ def read_transform():
   if filename[-7:].upper() == "_PMT.SZ":
     tmp['unk3?'] = read_l(1, silent=True)[0]
     print(tmp['unk3?'])
-    assert(tmp['unk3?'] in (0, 0xBF800000, 0xFFFFFFFF))
+    assert(tmp['unk3?'] in (0, 0x3CA3D70A, 0xBF800000, 0xFFFFFFFF))
   
   if filename[-7:].upper() == "_SMT.GZ":
     #FIXME: These appear to be floats in OR2006
@@ -372,25 +372,32 @@ def cs___smt_extract(f):
     for j in range(head2[0]):
       print()
 
-      va,vb,vc = read_l(3)
+      index_buffer_ptr_,vertex_buffer_ptr_ = read_l(2)
 
-      vd = read_l(1)[0]
-      #assert(vd == 0) # Typically true, but not always
+      unk_xxx_ = read_l(1)[0]
 
-      ve,vf = read_l(2) # Header pointers
-      assert(ve == vf)
+      unk_yyy_ = read_l(1)[0]
+      #assert(unk_yyy_ == 0) # Typically true, but not always
 
-      vg = read_l(1)[0] # Collection pointer?
-      print(vg - ve)
+      header_offset_,header_offset_2 = read_l(2) # Header pointers
+      assert(header_offset_ == header_offset_2)
+
+      data_offset_ = read_l(1)[0] # Collection pointer?
+      print(data_offset_ - header_offset_)
       if filename[-7:].upper() == "_SMT.GZ":
-        assert(vg == ve + 0x30)
+        assert(data_offset_ == header_offset_ + 0x30)
 
       vh, vi, vj, vk, vl, vm, vn = read_l(7)
 
       vo = read_l(1)[0] # Always zero
       assert(vo == 0)
 
-      offsets += [(ve + 0x10, vg + 0x10, va, vb, vc, vd)]
+      offsets += [(header_offset_ + 0x10,
+                   data_offset_ + 0x10,
+                   index_buffer_ptr_ + 0x10,
+                   vertex_buffer_ptr_ + 0x10,
+                   unk_xxx_ + 0x10,
+                   unk_yyy_)] #FIXME: Also offset this?
 
       cy += 1
       print(cy)
@@ -429,9 +436,9 @@ def cs___smt_extract(f):
     index_buffer_ptr = offsetx[2] # [middle] Some start pointer?
     vertex_buffer_ptr = offsetx[3] # [lowest] Some start pointer? 0x10 bytes for each element between middle and highest?
     unk_xxx = offsetx[4] # [highest] Some end pointer [+4 / +8 on va?]
-    unk_d = offsetx[5] #FIXME: Use after figuring out what this is
+    unk_yyy = offsetx[5] #FIXME: Use after figuring out what this is
 
-    print(unk_xxx, unk_d)
+    print(unk_xxx, unk_yyy)
     #assert(unk_d == 0)
 
     common.offset = header_offset
@@ -828,7 +835,7 @@ def cs___smt_extract(f):
     vertex_buffers = []
 
     print()
-    common.offset = vertex_buffer_ptr + 0x10
+    common.offset = vertex_buffer_ptr
     print("Vertex buffers", common.offset)
     #FIXME: Use all loop members
     ptrass = []
@@ -857,7 +864,7 @@ def cs___smt_extract(f):
     result['vertex_buffers'] = vertex_buffers
 
     print()
-    common.offset = index_buffer_ptr + 0x10
+    common.offset = index_buffer_ptr
     print("Index buffers", common.offset)
     index_buffers = []
     for i in range(head2[0]):
@@ -907,11 +914,11 @@ def cs___smt_extract(f):
 
     print()
 
-    print(va,vb,vc)
+    print(index_buffer_ptr,vertex_buffer_ptr,unk_xxx)
 
     #FIXME: Broken for OR2006 and mostly unknown for OR2
-    count1 = (vc - va) // 4
-    count2 = (va - vb) // 0x10
+    count1 = (unk_xxx - index_buffer_ptr) // 4
+    count2 = (index_buffer_ptr - vertex_buffer_ptr) // 0x10
     print(count1, count2, head2[0])
     if filename[-7:].upper() == "_SMT.GZ":
       assert(count1 == count2)

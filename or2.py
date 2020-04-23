@@ -130,5 +130,12 @@ if __name__ == "__main__":
         gz_f.seek(0)
         cs___smt_extract(gz_f)
 
+      if filename[-7:].upper() == "_PMT.SZ":
+        gz_f.seek(0)
+        obj___smt_extract(gz_f) #FIXME: Use obj__smt instead?
+
+        #FIXME: Remove once common parts have been factored out
+        gz_f.seek(0)
+        cs___smt_extract(gz_f)
 
 

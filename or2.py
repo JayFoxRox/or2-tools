@@ -6,6 +6,7 @@ from outrun2.coli_extract import *
 from outrun2.cs___smt_extract import *
 from outrun2.obj___smt_extract import *
 from outrun2.sin_extract import *
+from outrun2.oso_extract import *
 from outrun2.bin_extract import *
 
 try:
@@ -70,6 +71,14 @@ if __name__ == "__main__":
       else:
         gz_f.seek(0)
       coli_extract(gz_f)
+
+    if filename[0:4].upper() == "OSO_":
+      gz_f.seek(0)
+      if filename.upper() in ["OSO_DYN_BK_1A_BIN.GZ", "OSO_DYN_CS_3B_BIN.GZ"]:
+        # These seem to be very different; bug? unused files?
+        print("Skipping OSO for %s" % filename)
+      else:
+        oso_extract(gz_f)
 
     if filename[0:3].upper() == "CS_":
 

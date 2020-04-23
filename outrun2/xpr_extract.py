@@ -222,11 +222,11 @@ def xpr_extract(f):
 
       im = im.transpose(PIL.Image.FLIP_TOP_BOTTOM)
       if export_png:
-        im.save("/tmp/or2/%s/xpr/%d-texture-0-0-%X.png" % (filename, i, fmt_type))
+        im.save("/tmp/or2/%s/xpr/%d-texture.png" % (filename, i))
 
 
       fo.write(b"newmtl texture-%d\n" % i)
-      fo.write(b"map_Kd ../xpr/%d-texture-0-0-%X.png\n" % (i, fmt_type))
+      fo.write(b"map_Kd ../xpr/%d-texture.png\n" % (i))
       
 
       #FIXME: Export DDS instead?

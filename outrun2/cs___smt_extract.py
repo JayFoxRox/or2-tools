@@ -4,6 +4,7 @@ try:
   import bpy
   import bmesh
   from bpy_extras import object_utils
+  import mathutils
   export_blender = True
 except:
   print("Blender export disabled")
@@ -24,12 +25,6 @@ read_b = common.read_b
 
 export_tags = True
 export_objs = True
-
-fo = None
-obj_v_index = None
-obj_vt_index = None
-obj_vn_index = None
-tex_unit_index = 0
 
 filename = None
 
@@ -228,7 +223,7 @@ def read_transform():
   if filename[-7:].upper() == "_PMT.SZ":
     tmp['unk3?'] = read_l(1, silent=True)[0]
     print(tmp['unk3?'])
-    assert(tmp['unk3?'] in (0, 0xFFFFFFFF))
+    assert(tmp['unk3?'] in (0, 0xBF800000, 0xFFFFFFFF))
   
   if filename[-7:].upper() == "_SMT.GZ":
     #FIXME: These appear to be floats in OR2006
@@ -239,10 +234,6 @@ def read_transform():
 
 def cs___smt_extract(f):
   global filename
-  global fo
-  global obj_v_index
-  global obj_vt_index
-  global obj_vn_index
 
   # Designed for CS_CS_1A_SMT.GZ   weird.bin
 
@@ -835,6 +826,7 @@ def cs___smt_extract(f):
     for offseti, result in enumerate(result_list):
 
       groups = result['groups']
+      matrices = result['matrices']
       collect2 = result['objects']
       collect3 = result['batches']
       collect4 = result['parts']
@@ -865,42 +857,32 @@ def cs___smt_extract(f):
 
 
 
-        
-      print()
-      print("Exporting")
+      # Decode and cache all indices and vertices
+      collect6_cache = []
+      for i6, mesh in enumerate(collect6):
+        collect6_cache_entry = {}
 
-      real_offset = common.offset         
+        index_ptr = index_buffers[i6]['offset'] + 0x10
+        vertex_ptr = data_base + vertex_buffers[i6]['offset']
 
-      obj_v_index = 1
-      obj_vt_index = 1
-      obj_vn_index = 1
-      fo = open("/tmp/or2/%s/cs___smt/element-%d.obj" % (filename, offseti), "wb")
-      fo.write(b"s 1\n")
-      fo.write(b"mtllib ../xpr/xpr.mtl\n")
 
-      if export_blender:
-        blender_mesh = bpy.data.meshes.new("element-%d" % offseti)
-        bm = bmesh.new()
-        blender_uvs = [{},{},{},{}]
+        index_buf_size = mesh['ib_size']
 
-      # Export all vertices
-      vertex_bases = []
-      for i6 in range(len(collect6)):
-        mesh = collect6[i6]
 
-        vertex_bases += [(obj_v_index, obj_vt_index, obj_vn_index)]
+        assert(index_buf_size % 2 == 0)
+        index_count = index_buf_size // 2
+        common.offset = index_ptr
+        indices = read_h(index_count, silent=True)
+        collect6_cache_entry['indices'] = indices
 
-        vb = data_base + vertex_buffers[i6]['offset']        
-        
+
         fvf = mesh['fvf?']
         vertex_buf_size = mesh['vb_size']
         vertex_size = mesh['vertex_size'] 
 
+
         assert(vertex_buf_size % vertex_size == 0)
         vertex_count = vertex_buf_size // vertex_size
-
-        #FIXME: We keep re-uploading a lot of the vertex buffer
-        #print(draw_count, index_count, vertex_count)
 
         #FIXME: Fix <SPECIAL> mode [44 bytes]
         #FIXME: This should have the right size, but it will probably still be bad
@@ -923,22 +905,23 @@ def cs___smt_extract(f):
 
         has_normal = fvf & 0x10
         has_diffuse = fvf & 0x40
-        has_texture = tex_unit_index < texture_count
+
+        collect6_cache_entry['vertices'] = []
 
         #FIXME: Where to get the vertex count?
-        common.offset = vb
+        common.offset = vertex_ptr
         for i in range(vertex_count):
 
-          s = [] #b"# %d %d 0x%X\n" % (common.offset, vertex_size, fvf)
+          vertex = {}
 
           p = read_f(3, silent=True)
-          s += [b"v %f %f %f\n" % p]
-          if export_blender:
-            vert = bm.verts.new(p)
+          vertex['position'] = p
 
+          vertex['beta'] = []
           for j in range(betas):
             #FIXME: Support beta weights
-            read_f(1, silent=True)[0]
+            beta = read_f(1, silent=True)[0]
+            vertex['beta'] += [beta]
 
           if has_normal:
             n = read_l(1, silent=True)[0]
@@ -949,88 +932,52 @@ def cs___smt_extract(f):
             ny -= (ny & (1 << 10)) << 1
             nz -= (nz & (1 << 9)) << 1
             nz = nz * 2
-            s += [b"vn %d %d %d\n# 0x%08X\n" % (nx,ny,nz,n)]
-
-            if export_blender:
-              #FIXME: n is unused
-              vert.normal = (nx,ny,nz)
+            vertex['normal'] = (nx,ny,nz,n)
 
           if has_diffuse:
             #FIXME: Diffuse color
-            read_l(1, silent=True)
+            vertex['diffuse'] = read_b(4, silent=True)
 
+          vertex['uv'] = []
           for j in range(texture_count):
             u, v = read_f(2, silent=True)
-            if j == tex_unit_index:
-              s += [b"vt %f %f\n" % (u, v)]
-            if export_blender:
-              blender_uvs[j][vert.index] = (u, v)
+            vertex['uv'] += [(u,v)]
 
+          collect6_cache_entry['vertices'] += [vertex]
 
-          fo.write(b"".join(s))
+        collect6_cache += [collect6_cache_entry]
 
-
-        obj_v_index += vertex_count
-        if has_texture:
-          obj_vt_index += vertex_count
-        if has_normal:
-          obj_vn_index += vertex_count
-
-      if export_blender:
-        bm.verts.ensure_lookup_table() # Required after adding / removing vertices and before accessing them by index.
-        bm.verts.index_update()  # Required to actually retrieve the indices later on (or they stay -1).
-
-      def export_mesh(draw_type, draw_count, index_buf_size, vertex_index, vertex_offset, index_ptr):
-        global fo
-        obj_v_index, obj_vt_index, obj_vn_index = vertex_index
-
-        real_offset = common.offset
-
-        #vertex_size = 24
         
 
-        assert(index_buf_size % 2 == 0)
-        index_count = index_buf_size // 2
 
-        def emit_index(i):
-          global fo
-          s = []
-          s += [b" %d" % (obj_v_index+i)]
+      print()
+      print("Exporting")
 
-          if has_texture:
-            s += [b"/%d" % (obj_vt_index+i)]
-          else:
-            if has_normal:
-              s += [b"/"]
+      def export_mesh(bm, draw_type, draw_count, indices, vertices):
 
-          if has_normal:    
-            s += [b"/%d" % (obj_vn_index+i)]
+        known_vertices = {}
 
-          return b"".join(s)
-        
+        def emit_vertex(i):
+          # Use cache for indices which have been exported already
+          if i in known_vertices:
+            return known_vertices[i]
+          v = bm.verts.new(vertices[i]['position'])            
+          known_vertices[i] = v
+          return v
+
         def emit_face(ls):
-          global fo
-          s = []
-          s += [b"f"]
-          for l in ls:
-            s += [emit_index(l+vertex_offset)]
-          s += [b"\n"]
-          fo.write(b"".join(s))
-
           if export_blender:
             #if len(ls) != len(set(ls)):
             #  print("degenerate face", draw_type, ls)
             #  #assert(len(ls) == 3)
             #  return
             try:
-              bm.faces.new(bm.verts[obj_v_index+l+vertex_offset-1] for l in ls)
+              bm.faces.new(emit_vertex(l) for l in ls)
             except:
               print("some error during face creation")
 
+        #vertex_size = 24
 
-        #FIXME: Display the full index buffer?
-        common.offset = index_ptr
-        indices = read_h(index_count, silent=True)
         
         if draw_type == 5:
           for i in range(draw_count):
@@ -1047,11 +994,46 @@ def cs___smt_extract(f):
         else:
           assert(False)
 
-        common.offset = real_offset
+        #FIXME: Repair
+        if export_blender:
+
+          bm.verts.ensure_lookup_table() # Required after adding / removing vertices and before accessing them by index.
+          bm.verts.index_update()  # Required to actually retrieve the indices later on (or they stay -1).
+
+        if export_blender:
+
+          # Get the blender vertex index for each vertex
+          known_vertices_i = {v.index:i for i,v in known_vertices.items()}
+
+          # Set the UV coordinates by iterating through the face loops.
+          if 'diffuse' in vertices[0]:
+            diffuse_layer = bm.loops.layers.color.new("diffuse")
+          uv_layers = [bm.loops.layers.uv.new("texture-%d" % i) for i in range(len(vertices[0]['uv']))]
+          for face in bm.faces:
+            for loop in face.loops:
+              v = vertices[known_vertices_i[loop.vert.index]]
+              for i,uv in enumerate(v['uv']):
+                loop[uv_layers[i]].uv = uv
+              if 'diffuse' in vertices[0]:
+                loop[diffuse_layer] = [v['diffuse'][i] / 255.0 for i in [2,1,0,3]]
+
+          #FIXME: Not working yet - this is a bit more complicated
+          # Add vertex weights
+          #dl = bm.verts.layers.deform.verify()
+          #groups = [bm.vertex_groups.new("weight-%d" % i) for i in range(len(vertices[0]['beta']))]
+          #for i,v in known_vertices_i.items():
+          #  for j,beta in enumerate(vertices[v]['beta']):
+          #    bm.verts[i][dl][groups[j].index] = beta
+
+      my_sub_coll1 = bpy.data.collections.new(name="offset-%d" % offseti)
+      bpy.context.scene.collection.children.link(my_sub_coll1)
 
       # Use draw call information
-      def draw(i1):
+      def draw(i1, origin):
         unk_collect1 = groups[i1]
+
+        my_sub_coll = bpy.data.collections.new(name="group-%d-%s" % (i1,origin))
+        my_sub_coll1.children.link(my_sub_coll)
 
         print(offseti, len(offsets), ":", i1, len(groups))
 
@@ -1059,7 +1041,7 @@ def cs___smt_extract(f):
         im = unk_collect1['matrix_index?']
 
         #FIXME: Why are these 2 different ones?
-        for _i2 in [unk_collect1['collect2_index?']] + list(unk_collect1['collect2_indices?']):
+        for i2_index, _i2 in enumerate([unk_collect1['collect2_index?']] + list(unk_collect1['collect2_indices?'])):
           i2 = _i2
 
           if i2 == 0xFFFFFFFF:
@@ -1075,7 +1057,9 @@ def cs___smt_extract(f):
             i6 = unk_collect3['collect6_index?']
             mesh = collect6[i6]
 
-            ib = index_buffers[i6]['offset'] + 0x10
+            indices = collect6_cache[i6]['indices']
+            vertices = collect6_cache[i6]['vertices']
+
 
             #FIXME: Also do for b_count?
             for l4 in ['a','b']:
@@ -1095,42 +1079,84 @@ def cs___smt_extract(f):
                 draw_call = collect5[i5]
                 textures = collect7[i7]
 
+                index_offset = draw_call['index_offset']
+                vertex_offset = unk_collect4['vertex_offset']
 
 
                 #FIXME: Handle transform
-                fo.write(b"usemtl texture-%d\n" % (textures['units'][tex_unit_index]['texture_index']))
+                #fo.write(b"usemtl texture-%d\n" % (textures['units'][tex_unit_index]['texture_index']))
 
                 #assert(draw_call['index_offset'] == 0)
                 #assert(draw_call['unk0?'] == 0x697)
 
-                ib_skip = draw_call['index_offset'] * 2
+                mesh_name = "c1[%s],c2[%d->%s];c3[%s];c4%s[%s];c5[%s];c6[%s];c7[%s]" % (i1, i2_index, i2, i3, l4, i4, i5, i6, i7)
 
-                fo.write(("o c1[%s],c2[%s];c3[%s];c4%s[%s];c5[%s];c6[%s];c7[%s]\n" % (i1, i2, i3, l4, i4, i5, i6, i7)).encode('ascii'))
-                export_mesh(draw_call['primitive_type'], draw_call['index_count'], mesh['ib_size'] - ib_skip, vertex_bases[i6], unk_collect4['vertex_offset'], ib + ib_skip)
+                # Start a new object
+                if export_blender:
+                  blender_mesh = bpy.data.meshes.new("element-%d/%s" % (offseti, mesh_name))
+                  bm = bmesh.new()
+
+                if export_blender:
+                  first_blender_vertex = len(bm.verts)
+
+                export_mesh(bm, draw_call['primitive_type'], draw_call['index_count'], indices[index_offset:], vertices[vertex_offset:])
+
+                if export_blender:
+                  bm.to_mesh(blender_mesh)
+                  blender_mesh.update()
+                  foo = object_utils.object_data_add(bpy.context, blender_mesh)
+
+                  mat = bpy.data.materials.new(name="OR2-Material")
+                  mat.use_nodes = True
+                  mat_nodes = mat.node_tree.nodes
+                  mat_links = mat.node_tree.links
+                  # a new material node tree already has a diffuse and material output node
+                  output = mat_nodes['Material Output']
+                  diffuse = mat_nodes['Principled BSDF']
+
+                  for i, texture_unit in enumerate(textures['units']):
+                    ti = texture_unit['texture_index']
+
+                    if ti == 0xFFFFFFFF:
+                      continue
+                                    
+                    #FIXME: This might point at the wrong one?
+                    uv_node = mat_nodes.new("ShaderNodeUVMap")
+                    uv_node.uv_map = "texture-%d" % i
+
+                    node = mat_nodes.new('ShaderNodeTexImage')
+                    node.projection = 'FLAT' #FIXME: Box for better interpolation near edges [only for auto-uv]
+                    node.projection_blend = 1
+                    node.image = bpy.data.images.load("/tmp/or2/%s/xpr/%d-texture.png" % (filename, ti))
+                    mat_links.new(uv_node.outputs[0], node.inputs[0])
+
+                    #FIXME: Instead, mix all textures
+                    mat_links.new(node.outputs[0], output.inputs[0])
+
+                  #FIXME: Respect vertex-color
+
+                  # Remove default node and set it up
+                  mat_nodes.remove(diffuse)
+                  foo.data.materials.append(mat)
+
+                  print(foo)
+                  if im != 0xFFFFFFFF:
+                    foo.matrix_world = matrices[im]
+
+                  if True:
+                    # Convert from Y-up axis to Z-up axis and scale down
+                    s = 0.1
+                    foo.matrix_world = mathutils.Matrix([[s,0,0,0],[0,0,-s,0],[0,s,0,0],[0,0,0,1]]) @ foo.matrix_world
+
+                  #FIXME: Unlink bpy.context.scene.collection.objects.unlink(foo)
+                  my_sub_coll.objects.link(foo)
 
         if unk_collect1['collect1_index1?'] != 0xFFFFFFFF:
-          draw(unk_collect1['collect1_index1?'])
+          draw(unk_collect1['collect1_index1?'], 'left')
         if unk_collect1['collect1_index2?'] != 0xFFFFFFFF:
-          draw(unk_collect1['collect1_index2?'])
+          draw(unk_collect1['collect1_index2?'], 'right')
 
-      draw(0)
-
-      if export_blender:
-
-        #FIXME: Make this a bit simpler somehow
-        # Set the UV coordinates by iterating through the face loops.
-        uv_layer = bm.loops.layers.uv.new()
-        for face in bm.faces:
-          for loop in face.loops:
-            # Get the index of the vertex the loop contains.
-            if loop.vert.index in blender_uvs[0]:
-              loop[uv_layer].uv = blender_uvs[0][loop.vert.index]
-
-        bm.to_mesh(blender_mesh)
-        blender_mesh.update()
-        object_utils.object_data_add(bpy.context, blender_mesh)
-
-      common.offset = real_offset
+      draw(0, 'root')
 
 
     print()

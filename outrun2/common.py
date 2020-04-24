@@ -10,9 +10,19 @@ base = 0
 
 disable_tags = False
 
+def log_region(start, size, typename, comment=None):
+  global regions
+  if not disable_tags:
+    if comment == None:
+      comment = "unknown:%s" % typename
+      trace = traceback.extract_stack(limit=None)
+      for t in trace[-3:-2]:
+        comment += " [%s:%d]" % (os.path.basename(t[0]), t[1])
+    regions += [(start, start + size, comment)]
+  return
+
 def read_t(count, ty, fmt, comment=None, silent=False):
   global offset
-  global regions
 
   if count == 0:
     return ()
@@ -23,14 +33,7 @@ def read_t(count, ty, fmt, comment=None, silent=False):
   if size == 0:
     return ()
 
-  if not disable_tags:
-    if comment == None:
-      comment = "unknown:%s" % ty[1:]
-      trace = traceback.extract_stack(limit=None)
-      for t in trace[-3:-2]:
-        comment += " [%s:%d]" % (os.path.basename(t[0]), t[1])
-      
-    regions += [(offset, offset + size, comment)]
+  log_region(offset, size, tys, comment)
 
   vs = struct.unpack_from(tys, data, offset)
   offset += size
@@ -55,6 +58,30 @@ def read_l(count, comment=None, silent=False):
 def read_f(count, comment=None, silent=False):
   global offset
   return read_t(count, "f", "%+.5f", comment, silent) 
+
+def read_s(count=0, comment=None, silent=False):
+  global offset
+
+  if count == 0:
+    size = 0
+    while data[offset+size] != 0x00:
+      size += 1
+    size += 1
+  else:
+    size = count
+
+  log_region(offset, size, "s%d" % count, comment)
+
+  if count == 0:
+    size -= 1
+
+  s = data[offset:offset+size]
+  s = s.decode('ascii')
+
+  if not silent:
+    print(s)
+
+  return s
 
 def export_tags(path):
   if disable_tags:

@@ -9,6 +9,7 @@ from outrun2.sin_extract import *
 from outrun2.oso_extract import *
 from outrun2.scn_env_fog_extract import *
 from outrun2.scn_env_sun_extract import *
+from outrun2.object_db_bin_extract import *
 from outrun2.bin_extract import *
 
 try:
@@ -64,6 +65,16 @@ if __name__ == "__main__":
       gz_f.seek(0)
       xpr_extract(gz_f)
 
+    if filename[0:14].upper() == "OBJECT_DB_BIN.":
+      if game == GAME_OR2006:
+        #FIXME: Assert that the length is as expected
+        gz_f.seek(0)
+        print(struct.unpack("<L", gz_f.read(4))[0])
+        gz_f.seek(4)
+      else:
+        gz_f.seek(0)
+      object_db_bin_extract(gz_f)
+
     if filename[0:5].upper() == "COLI_":
       if game == GAME_OR2006:
         #FIXME: Assert that the length is as expected
@@ -75,7 +86,13 @@ if __name__ == "__main__":
       coli_extract(gz_f)
 
     if filename[0:4].upper() == "OSO_":
-      gz_f.seek(0)
+      if game == GAME_OR2006:
+        #FIXME: Assert that the length is as expected
+        gz_f.seek(0)
+        print(struct.unpack("<L", gz_f.read(4))[0])
+        gz_f.seek(4)
+      else:
+        gz_f.seek(0)
       if filename.upper() in ["OSO_DYN_BK_1A_BIN.GZ", "OSO_DYN_CS_3B_BIN.GZ"]:
         # These seem to be very different; bug? unused files?
         print("Skipping OSO for %s" % filename)

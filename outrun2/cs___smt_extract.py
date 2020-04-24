@@ -534,6 +534,9 @@ def cs___smt_extract(f):
 
     common.offset = data_offset
 
+    #FIXME: Dirty hack for OR2006 AMAZ
+    common.offset = offsetx[0] + groups_list[0]
+
     groups = []
     print("")
     print("groups ? (collect1)")
@@ -764,7 +767,7 @@ def cs___smt_extract(f):
       assert(fvf == 0)
       assert(fvf_size == tmp['vertex_size'])
 
-      assert(tmp['unk0?'] in [1,4])
+      assert(tmp['unk0?'] in [1,2,4])
       assert(tmp['unk2?'] in [0,2,3])
       collect6 += [tmp]
       i += 1
